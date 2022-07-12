@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "histobag.h"
+
 /*
  * The structure is a trie with a fixed depth. At each level the child
  * nodes are held in a popcount packed array of up to 64 elements.
@@ -44,12 +46,11 @@ struct bag2 {
 	struct bag1 *bag2;
 };
 
-typedef struct histobag {
+struct histobag {
 	double alpha, beta;
-	uint64_t buckets;
-	uint64_t baggage;
+	size_t count2, count1, count0;
 	struct bag2 trie;
-} histobag;
+};
 
 static inline uint32_t
 key_of_value(histobag *h, double value) {
@@ -116,38 +117,24 @@ histobag_destroy(histobag *h) {
 	free(h);
 }
 
-void
-histobag_validate(histobag *h) {
-	uint64_t buckets = 0;
-	uint64_t baggage = 0;
+size_t
+histobag_population(histobag *h) {
+	return(h->trie.total2);
+}
 
-	struct bag2 *bag2 = &h->trie;
-	uint8_t pop2 = popcount(bag2->bmp2);
-	uint64_t total2 = 0;
-	for(uint8_t i2 = 0; i2 < pop2; i2++) {
-		struct bag1 *bag1 = bag2->bag2 + i2;
-		uint8_t pop1 = popcount(bag1->bmp1);
-		uint64_t total1 = 0;
-		for(uint8_t i1 = 0; i1 < pop1; i1++) {
-			struct bag0 *bag0 = bag1->bag1 + i1;
-			uint8_t pop0 = popcount(bag0->bmp0);
-			uint64_t total0 = 0;
-			for(uint8_t i0 = 0; i0 < pop0; i0++) {
-				uint64_t *bucket = bag0->bag0 + i0;
-				total0 += *bucket;
-				buckets++;
-			}
-			assert(bag0->total0 == total0);
-			total1 += total0;
-			baggage++;
-		}
-		assert(bag1->total1 == total1);
-		total2 += total1;
-		baggage++;
-	}
-	assert(bag2->total2 == total2);
-	assert(h->buckets == buckets);
-	assert(h->baggage == baggage);
+size_t
+histobag_buckets(histobag *h) {
+	return(h->count0);
+}
+
+#define bag_elem_size(bag) sizeof(((struct bag *)NULL)->bag[0])
+
+size_t
+histobag_size(histobag *h) {
+	size_t size0 = h->count0 * bag_elem_size(bag0);
+	size_t size1 = h->count1 * bag_elem_size(bag1);
+	size_t size2 = h->count2 * bag_elem_size(bag2);
+	return(size0 + size1 + size2 + sizeof(*h));
 }
 
 bool
@@ -244,7 +231,7 @@ histobag_add(histobag *h, double value, size_t count) {
 	uint64_t bit2 = 1ULL << shift2;
 	if(missing(bag2->bmp2, bit2)) {
 		INSERT(bag2->bag2, bag2->bmp2, bit2);
-		h->baggage++;
+		h->count2++;
 	}
 
 	struct bag1 *bag1 = bag2->bag2 + lesser(bag2->bmp2, bit2);
@@ -255,7 +242,7 @@ histobag_add(histobag *h, double value, size_t count) {
 	uint64_t bit1 = 1ULL << shift1;
 	if(missing(bag1->bmp1, bit1)) {
 		INSERT(bag1->bag1, bag1->bmp1, bit1);
-		h->baggage++;
+		h->count1++;
 	}
 
 	struct bag0 *bag0 = bag1->bag1 + lesser(bag1->bmp1, bit1);
@@ -266,9 +253,54 @@ histobag_add(histobag *h, double value, size_t count) {
 	uint64_t bit0 = 1ULL << shift0;
 	if(missing(bag0->bmp0, bit0)) {
 		INSERT(bag0->bag0, bag0->bmp0, bit0);
-		h->buckets++;
+		h->count0++;
 	}
 
 	uint64_t *bucket = bag0->bag0 + lesser(bag0->bmp0, bit0);
 	*bucket += count;
+}
+
+void
+histobag_validate(histobag *h) {
+	size_t count2 = 0;
+	size_t count1 = 0;
+	size_t count0 = 0;
+
+	double value = 0.0;
+	size_t count;
+
+	struct bag2 *bag2 = &h->trie;
+	uint8_t pop2 = popcount(bag2->bmp2);
+	uint64_t total2 = 0;
+	for(uint8_t i2 = 0; i2 < pop2; i2++) {
+		struct bag1 *bag1 = bag2->bag2 + i2;
+		uint8_t pop1 = popcount(bag1->bmp1);
+		uint64_t total1 = 0;
+		for(uint8_t i1 = 0; i1 < pop1; i1++) {
+			struct bag0 *bag0 = bag1->bag1 + i1;
+			uint8_t pop0 = popcount(bag0->bmp0);
+			uint64_t total0 = 0;
+			for(uint8_t i0 = 0; i0 < pop0; i0++) {
+				uint64_t *bucket = bag0->bag0 + i0;
+				double prev = value;
+				assert(histobag_next(h, &value, &count));
+				assert(prev < value);
+				assert(count == *bucket);
+				total0 += *bucket;
+				count0++;
+			}
+			assert(bag0->total0 == total0);
+			total1 += total0;
+			count1++;
+		}
+		assert(bag1->total1 == total1);
+		total2 += total1;
+		count2++;
+	}
+	assert(bag2->total2 == total2);
+	assert(histobag_next(h, &value, &count) == false);
+
+	assert(h->count2 == count2);
+	assert(h->count1 == count1);
+	assert(h->count0 == count0);
 }
