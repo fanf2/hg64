@@ -75,7 +75,7 @@ load_data(FILE *fp, hg64 *hg) {
 int main(void) {
 
 	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
-		data[i] = rand_lemire(SAMPLE_COUNT);
+		data[i] = (rand_normal() + 6) * SAMPLE_COUNT;
 	}
 
 	hg64 *hg = hg64_create();
@@ -96,4 +96,5 @@ int main(void) {
 	data_vs_histo(stderr, hg, 0.999);
 	data_vs_histo(stderr, hg, 0.9999);
 	data_vs_histo(stderr, hg, 0.99999);
+	data_vs_histo(stderr, hg, 0.999999);
 }

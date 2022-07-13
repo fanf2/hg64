@@ -117,13 +117,6 @@ get_bucket(hg64 *hg, uint8_t exponent, uint8_t mantissa, bool alloc) {
 	return(&pack->bucket[pos]);
 }
 
-static uint8_t
-bucket_position(hg64 *hg, uint8_t exponent, uint8_t mantissa) {
-	struct pack *pack = &hg->pack[exponent];
-	uint64_t mask = (1ULL << mantissa) - 1;
-	return(popcount(pack->bmp & mask));
-}
-
 /**********************************************************************/
 
 void
@@ -161,34 +154,39 @@ hg64_get(hg64 *hg, size_t i,
 
 /**********************************************************************/
 
+
+
 uint64_t
 hg64_value_at_rank(hg64 *hg, uint64_t rank) {
-	uint8_t exponent, mantissa, position;
+	uint8_t exponent, mantissa;
+	uint64_t *bucket = NULL;
 	struct pack *pack;
 
-	assert(0 <= rank && rank <= hg->total);
+	assert(0 <= rank && rank < hg->total);
 	for(exponent = 0; exponent < PACKS; exponent++) {
 		pack = &hg->pack[exponent];
-		if(rank <= pack->total) {
+		if(rank < pack->total) {
 			break;
 		}
 		rank -= pack->total;
 	}
 	assert(exponent < PACKS);
 
-	uint64_t *bucket = pack->bucket;
 	for(mantissa = 0; mantissa < 64; mantissa++) {
-		position = bucket_position(hg, exponent, mantissa);
-		if(rank <= bucket[position]) {
+		bucket = get_bucket(hg, exponent, mantissa, false);
+		if(bucket == NULL) {
+			continue;
+		} else if(rank < *bucket) {
 			break;
+		} else {
+			rank -= *bucket;
 		}
-		rank -= bucket[position];
 	}
 	assert(mantissa < 64);
 
 	uint64_t base = get_base(exponent, mantissa);
 	uint64_t range = get_range(exponent);
-	uint64_t inter = interpolate(range, rank, bucket[position]);
+	uint64_t inter = interpolate(range, rank, *bucket);
 	return(base + inter);
 }
 
@@ -196,7 +194,7 @@ uint64_t
 hg64_rank_of_value(hg64 *hg, uint64_t value) {
 	uint8_t exponent = get_exponent(value);
 	uint8_t mantissa = get_mantissa(value, exponent);
-	uint8_t position = bucket_position(hg, exponent, mantissa);
+	uint64_t *bucket = get_bucket(hg, exponent, mantissa, false);
 
 	uint64_t rank = 0;
 	for(uint8_t exp = 0; exp < exponent; exp++) {
@@ -204,7 +202,7 @@ hg64_rank_of_value(hg64 *hg, uint64_t value) {
 	}
 
 	struct pack *pack = &hg->pack[exponent];
-	for(uint8_t pos = 0; pos < position; pos++) {
+	for(uint8_t pos = 0; &pack->bucket[pos] < bucket; pos++) {
 		rank += pack->bucket[pos];
 	}
 
@@ -213,7 +211,7 @@ hg64_rank_of_value(hg64 *hg, uint64_t value) {
 		uint64_t base = get_base(exponent, mantissa);
 		uint64_t range = get_range(exponent);
 		uint64_t inter = value - base;
-		rank += interpolate(pack->bucket[position], inter, range);
+		rank += interpolate(*bucket, inter, range);
 	}
 
 	return(rank);
