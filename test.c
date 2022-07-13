@@ -1,3 +1,10 @@
+/*
+ * Written by Tony Finch <dot@dotat.at> <fanf@isc.org>
+ * You may do anything with this. It has no warranty.
+ * <https://creativecommons.org/publicdomain/zero/1.0/>
+ * SPDX-License-Identifier: CC0-1.0
+ */
+
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>

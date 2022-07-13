@@ -1,20 +1,10 @@
 /*
  * hg64 - 64-bit histograms
  *
- * Written by Tony Finch <dot@dotat.at>
+ * Written by Tony Finch <dot@dotat.at> <fanf@isc.org>
  * You may do anything with this. It has no warranty.
  * <https://creativecommons.org/publicdomain/zero/1.0/>
  * SPDX-License-Identifier: CC0-1.0
- */
-
-/*
- * A `hg64` is a histogram of uint64_t values. Values are assigned to
- * buckets by rounding them with about 1.5% relative accuracy.
- *
- * The minimum size of the histogram is 1.3 KiB, and each non-empty
- * bucket uses an additional 8 bytes. There can be up to 3712 buckets,
- * so the maximum size of the histogram is 30.3 KiB. It's normal to
- * have a few hundred buckets.
  */
 
 typedef struct hg64 hg64;

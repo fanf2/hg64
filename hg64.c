@@ -1,7 +1,7 @@
 /*
  * hg64 - 64-bit histograms
  *
- * Written by Tony Finch <dot@dotat.at>
+ * Written by Tony Finch <dot@dotat.at> <fanf@isc.org>
  * You may do anything with this. It has no warranty.
  * <https://creativecommons.org/publicdomain/zero/1.0/>
  * SPDX-License-Identifier: CC0-1.0
@@ -15,7 +15,7 @@
 
 #include "hg64.h"
 
-#define OUTARG(ptr, val) (((ptr) != NULL) && (*(ptr) = (val)))
+#define OUTARG(ptr, val) (((ptr) != NULL) && !(*(ptr) = (val)))
 
 /*
  * This data structure is a sparse array of buckets with (almost) 12
@@ -145,10 +145,10 @@ get_bucket(hg64 *hg, uint8_t exponent, uint8_t mantissa, bool alloc) {
 			return(NULL);
 		}
 		uint8_t count = popcount(bmp);
-		size_t alloc =  count + 1;
+		size_t need = count + 1;
 		size_t move = count - pos;
 		size_t size = sizeof(uint64_t);
-		uint64_t *ptr = realloc(pack->bucket, alloc * size);
+		uint64_t *ptr = realloc(pack->bucket, need * size);
 		memmove(ptr + pos + 1, ptr + pos, move * size);
 		hg->buckets += 1;
 		pack->bmp |= bit;

@@ -1,4 +1,11 @@
 /*
+ * Written by Tony Finch <dot@dotat.at> <fanf@isc.org>
+ * You may do anything with this. It has no warranty.
+ * <https://creativecommons.org/publicdomain/zero/1.0/>
+ * SPDX-License-Identifier: CC0-1.0
+ */
+
+/*
  * uniform unsigned integers in [0,limit)
  */
 uint32_t rand_lemire(uint32_t limit);
