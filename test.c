@@ -47,13 +47,13 @@ summarize(FILE *fp, hg64 *hg) {
 }
 
 static void
-data_vs_histo(FILE *fp, hg64 *hg, double q) {
+data_vs_hg64(FILE *fp, hg64 *hg, double q) {
 	size_t rank = (size_t)(q * SAMPLE_COUNT);
 	uint64_t value = hg64_value_at_quantile(hg, q);
 	double p = hg64_quantile_of_value(hg, data[rank]);
 	fprintf(fp,
 		"data  %5.1f%% %8llu  "
-		"histo %5.1f%% %8llu  "
+		"hg64 %5.1f%% %8llu  "
 		"error %+f\n",
 		q * 100, data[rank],
 		p * 100, value,
@@ -89,12 +89,12 @@ int main(void) {
 	for(double expo = -1; expo > -4; expo--) {
 		double step = pow(10, expo);
 		for(size_t n = 0; n < 9; n++) {
-			data_vs_histo(stderr, hg, q);
+			data_vs_hg64(stderr, hg, q);
 			q += step;
 		}
 	}
-	data_vs_histo(stderr, hg, 0.999);
-	data_vs_histo(stderr, hg, 0.9999);
-	data_vs_histo(stderr, hg, 0.99999);
-	data_vs_histo(stderr, hg, 0.999999);
+	data_vs_hg64(stderr, hg, 0.999);
+	data_vs_hg64(stderr, hg, 0.9999);
+	data_vs_hg64(stderr, hg, 0.99999);
+	data_vs_hg64(stderr, hg, 0.999999);
 }
