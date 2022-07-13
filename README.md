@@ -74,16 +74,23 @@ querying summary statistics about the data:
     you need to.
 
 
+repositories
+------------
+
+  * https://dotat.at/cgi/git/hg64.git
+  * https://github.com/fanf2/hg64
+
+
 contributing
 ------------
 
-Please send bug reports, suggestions, and patches by email to me,
-Tony Finch <<dot@dotat.at>>. Any contribution that you want
+Please send bug reports, suggestions, and patches by email to me, Tony
+Finch <<dot@dotat.at>>, or via GitHub. Any contribution that you want
 included in this code must be licensed under the [CC0 1.0 Public
-Domain Dedication][CC0], and must include a `Signed-off-by:` line
-to certify that you wrote it or otherwise have the right to pass
-it on as a open-source patch, according to the [Developer's
-Certificate of Origin 1.1][dco].
+Domain Dedication][CC0], and must include a `Signed-off-by:` line to
+certify that you wrote it or otherwise have the right to pass it on as
+a open-source patch, according to the [Developer's Certificate of
+Origin 1.1][dco].
 
 [cc0]: <https://creativecommons.org/publicdomain/zero/1.0/>
 [dco]: <https://developercertificate.org>
@@ -92,7 +99,7 @@ Certificate of Origin 1.1][dco].
 licence
 -------
 
-> Written by Tony Finch <<dot@dotat.at>> <<fanf@isc.org>>
+> Written by Tony Finch <<dot@dotat.at>> <<fanf@isc.org>>  
 > You may do anything with this. It has no warranty.  
 > <https://creativecommons.org/publicdomain/zero/1.0/>  
 > SPDX-License-Identifier: CC0-1.0
