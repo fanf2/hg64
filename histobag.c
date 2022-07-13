@@ -7,64 +7,59 @@
 
 #include "histobag.h"
 
-/*
- * The structure is a trie with a fixed depth. At each level the child
- * nodes are held in a popcount packed array of up to 64 elements.
- * Three levels of trie can be indexed with 3*log(64) = 3*6 = 18 bits.
- *
- * The histogram bucket size gamma is calculated from an accuracy
- * parameter alpha. Values are stored as some integer power of gamma;
- * rounding to an integer is what discards up to alpha of accuracy to
- * assign the value to a bucket.
- *
- * The power of gamma is an 18 bit number, which can cover most of the
- * range of double precision numbers to an accuracy of 0.2%.
- */
+#define OUTARG(ptr, val) (((ptr) != NULL) && (*(ptr) = (val)))
 
-#define EXPO_BITS (3 * 6)
-#define EXPO_ZERO 0
-#define EXPO_INF  ((1 << EXPO_BITS) - 1)
-#define EXPO_BIAS (1 << (EXPO_BITS - 1))
-#define EXPO_MIN  (0.0 - EXPO_BIAS)
-#define EXPO_MAX  (EXPO_BIAS - 1.0)
-
-struct bag0 {
-	uint64_t total0;
-	uint64_t bmp0;
-	uint64_t *bag0;
-};
-
-struct bag1 {
-	uint64_t total1;
-	uint64_t bmp1;
-	struct bag0 *bag1;
-};
-
-struct bag2 {
-	uint64_t total2;
-	uint64_t bmp2;
-	struct bag1 *bag2;
-};
+#define BAGS (64 - 6)
 
 struct histobag {
-	double alpha, beta;
-	size_t count2, count1, count0;
-	struct bag2 trie;
+	uint64_t total;
+	size_t baggage;
+	struct bag {
+		uint64_t total;
+		uint64_t bmp;
+		uint64_t *bucket;
+	} bag[BAGS];
 };
 
-static inline uint32_t
-key_of_value(histobag *h, double value) {
-	assert(0.0 <= value);
-	double expo = ceil(log(value) * h->beta);
-	return(expo < EXPO_MIN ? EXPO_ZERO :
-	       expo > EXPO_MAX ? EXPO_INF :
-	       expo + EXPO_BIAS);
+/**********************************************************************/
+
+histobag *
+histobag_create(void) {
+	histobag *h = malloc(sizeof(*h));
+	*h = (histobag){ 0 };
+	return(h);
 }
 
-static double
-value_of_key(histobag *h, uint32_t key) {
-	double expo = (double)key - EXPO_BIAS;
-	return(exp(expo / h->beta) * (1 - h->alpha));
+void
+histobag_destroy(histobag *h) {
+	for(uint8_t exp = 0; exp < BAGS; exp++) {
+		free(h->bag[exp].bucket);
+	}
+	*h = (histobag){ 0 };
+	free(h);
+}
+
+uint64_t
+histobag_population(histobag *h) {
+	return(h->total);
+}
+
+size_t
+histobag_buckets(histobag *h) {
+	return(h->baggage);
+}
+
+size_t
+histobag_size(histobag *h) {
+	return(sizeof(*h) + h->baggage * sizeof(uint64_t));
+}
+
+/**********************************************************************/
+
+static inline uint64_t
+interpolate(uint64_t range, uint64_t mul, uint64_t div) {
+	double frac = (double)mul / (double)div;
+	return((uint64_t)(range * frac));
 }
 
 static inline uint8_t
@@ -73,234 +68,211 @@ popcount(uint64_t bmp) {
 }
 
 static inline uint8_t
-least(uint64_t bmp) {
-	return((uint8_t)__builtin_ctzll((unsigned long long)bmp));
-}
-
-static inline size_t
-lesser(uint64_t bmp, uint64_t bit) {
-	return(popcount(bmp & (bit - 1)));
-}
-
-static inline bool
-missing(uint64_t bmp, uint64_t bit) {
-	return((bmp & bit) == 0);
-}
-
-histobag *
-histobag_create(double alpha) {
-	double gamma = (1 + alpha) / (1 - alpha);
-	double beta = 1 / log(gamma);
-	histobag *h = malloc(sizeof(*h));
-	*h = (histobag){
-		.alpha = alpha,
-		.beta = beta,
-	};
-	return(h);
-}
-
-void
-histobag_destroy(histobag *h) {
-	struct bag2 *bag2 = &h->trie;
-	uint8_t pop2 = popcount(bag2->bmp2);
-	for(uint8_t i2 = 0; i2 < pop2; i2++) {
-		struct bag1 *bag1 = bag2->bag2 + i2;
-		uint8_t pop1 = popcount(bag1->bmp1);
-		for(uint8_t i1 = 0; i1 < pop1; i1++) {
-			struct bag0 *bag0 = bag1->bag1 + i1;
-			free(bag0->bag0);
-		}
-		free(bag1->bag1);
+get_exponent(uint64_t value) {
+	if(value < 64) {
+		return(0); /* denormal */
+	} else {
+		int clz = __builtin_clzll((unsigned long long)value);
+		return((uint8_t)(63 - clz - 6));
 	}
-	free(bag2->bag2);
-	*h = (histobag){ 0 };
-	free(h);
 }
 
-size_t
-histobag_population(histobag *h) {
-	return(h->trie.total2);
+static inline uint8_t
+get_mantissa(uint64_t value, uint8_t exponent) {
+	return((value >> exponent) & 63);
 }
 
-size_t
-histobag_buckets(histobag *h) {
-	return(h->count0);
+static inline uint64_t
+get_range(uint8_t exponent) {
+	return((1ULL << exponent) >> 1);
 }
 
-#define bag_elem_size(bag) sizeof(((struct bag *)NULL)->bag[0])
-
-size_t
-histobag_size(histobag *h) {
-	size_t size0 = h->count0 * bag_elem_size(bag0);
-	size_t size1 = h->count1 * bag_elem_size(bag1);
-	size_t size2 = h->count2 * bag_elem_size(bag2);
-	return(size0 + size1 + size2 + sizeof(*h));
+static inline uint64_t
+get_base(uint8_t exponent, uint8_t mantissa) {
+	uint64_t normalized = mantissa | (exponent == 0 ? 0 : 64);
+	return(normalized << exponent);
 }
+
+static uint64_t *
+get_bucket(histobag *h, uint8_t exponent, uint8_t mantissa, bool alloc) {
+	struct bag *bag = &h->bag[exponent];
+	uint64_t bmp = bag->bmp;
+	uint64_t bit = 1ULL << mantissa;
+	uint64_t mask = bit - 1;
+	uint8_t pos = popcount(bmp & mask);
+	if((bmp & bit) == 0) {
+		if(!alloc) {
+			return(NULL);
+		}
+		uint8_t count = popcount(bmp);
+		size_t alloc =  count + 1;
+		size_t move = count - pos;
+		size_t size = sizeof(uint64_t);
+		uint64_t *ptr = realloc(bag->bucket, alloc * size);
+		memmove(ptr + pos + 1, ptr + pos, move * size);
+		h->baggage += 1;
+		bag->bmp |= bit;
+		bag->bucket = ptr;
+		bag->bucket[pos] = 0;
+	}
+	return(&bag->bucket[pos]);
+}
+
+static uint8_t
+bucket_position(histobag *h, uint8_t exponent, uint8_t mantissa) {
+	struct bag *bag = &h->bag[exponent];
+	uint64_t mask = (1ULL << mantissa) - 1;
+	return(popcount(bag->bmp & mask));
+}
+
+/**********************************************************************/
 
 bool
-histobag_next(histobag *h, double *value, size_t *count) {
-	/*
-	 * our first call has value == 0.0 in which case we must find
-	 * the first bit at each level, so we want the masks to be -1
-	 */
-	uint64_t first = -(*value == 0.0);
-	uint32_t key = key_of_value(h, *value);
-
-	/* walk down the trie for the current value */
-
-	struct bag2 *bag2 = &h->trie;
-	uint8_t shift2 = 63 & (key >> 12);
-	uint64_t bit2 = 1ULL << shift2;
-	assert(!missing(bag2->bmp2, bit2) || first);
-
-	struct bag1 *bag1 = bag2->bag2 + lesser(bag2->bmp2, bit2);
-	uint8_t shift1 = 63 & (key >> 6);
-	uint64_t bit1 = 1ULL << shift1;
-	assert(!missing(bag1->bmp1, bit1) || first);
-
-	struct bag0 *bag0 = bag1->bag1 + lesser(bag1->bmp1, bit1);
-	uint8_t shift0 = 63 & (key >> 0);
-	uint64_t bit0 = 1ULL << shift0;
-	assert(!missing(bag0->bmp0, bit0) || first);
-
-	/* bump to next bit and propagate carries */
-
-	uint64_t mask0 = (bit0 - 1) | bit0;
-	uint64_t bmp0 = bag0->bmp0 & (~mask0 | first);
-	if(bmp0 != 0) {
-		shift0 = least(bmp0);
-	} else {
-		uint64_t mask1 = (bit1 - 1) | bit1;
-		uint64_t bmp1 = bag1->bmp1 & (~mask1 | first);
-		if(bmp1 != 0) {
-			shift1 = least(bmp1);
-		} else {
-			uint64_t mask2 = (bit2 - 1) | bit2;
-			uint64_t bmp2 = bag2->bmp2 & (~mask2 | first);
-			if(bmp2 != 0) {
-				shift2 = least(bmp2);
-			} else {
-				return(false);
-			}
-
-			bit2 = 1ULL << shift2;
-			bag1 = bag2->bag2 + lesser(bag2->bmp2, bit2);
-			shift1 = least(bag1->bmp1);
-		}
-
-		bit1 = 1ULL << shift1;
-		bag0 = bag1->bag1 + lesser(bag1->bmp1, bit1);
-		shift0 = least(bag0->bmp0);
+histobag_get(histobag *h, size_t i,
+	     uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
+	uint8_t exponent = i / 64;
+	uint8_t mantissa = i % 64;
+	if(exponent >= BAGS) {
+		return(false);
 	}
-
-	bit0 = 1ULL << shift0;
-	uint64_t *bucket = bag0->bag0 + lesser(bag0->bmp0, bit0);
-
-	key = (shift2 << 12) | (shift1 << 6) | (shift0 << 0);
-	*value = value_of_key(h, key);
-	*count = *bucket;
+	uint64_t min = get_base(exponent, mantissa);
+	uint64_t max = min + get_range(exponent) - 1;
+	uint64_t *bucket = get_bucket(h, exponent, mantissa, false);
+	uint64_t count = (bucket == NULL) ? 0 : *bucket;
+	OUTARG(pmin, min);
+	OUTARG(pmax, max);
+	OUTARG(pcount, count);
 	return(true);
 }
 
-#define INSERT(bag, bmp, bit) \
-	((bag) = insert(bag, sizeof(*(bag)), &(bmp), bit))
-
-static void *
-insert(void *bag, size_t elem_size, uint64_t *pbmp, uint64_t bit) {
-	uint64_t bmp = *pbmp | bit;
-	size_t all = elem_size * popcount(bmp);
-	size_t lo = elem_size * lesser(bmp, bit);
-	size_t hi = all - lo;
-	uint8_t *bytes = realloc(bag, all);
-	assert(bytes != NULL);
-	memmove(bytes + lo + 1, bytes + lo, hi);
-	memset(bytes + lo, 0, elem_size);
-	*pbmp = bmp;
-	return(bytes);
-}
-
 void
-histobag_add(histobag *h, double value, size_t count) {
-	uint32_t key = key_of_value(h, value);
-
-	struct bag2 *bag2 = &h->trie;
-	bag2->total2 += count;
-
-	__builtin_prefetch(bag2->bag2);
-	uint8_t shift2 = 63 & (key >> 12);
-	uint64_t bit2 = 1ULL << shift2;
-	if(missing(bag2->bmp2, bit2)) {
-		INSERT(bag2->bag2, bag2->bmp2, bit2);
-		h->count2++;
+histobag_add(histobag *h, uint64_t value, uint64_t count) {
+	if(count == 0) {
+		return;
 	}
-
-	struct bag1 *bag1 = bag2->bag2 + lesser(bag2->bmp2, bit2);
-	bag1->total1 += count;
-
-	__builtin_prefetch(bag1->bag1);
-	uint8_t shift1 = 63 & (key >> 6);
-	uint64_t bit1 = 1ULL << shift1;
-	if(missing(bag1->bmp1, bit1)) {
-		INSERT(bag1->bag1, bag1->bmp1, bit1);
-		h->count1++;
-	}
-
-	struct bag0 *bag0 = bag1->bag1 + lesser(bag1->bmp1, bit1);
-	bag0->total0 += count;
-
-	__builtin_prefetch(bag0->bag0);
-	uint8_t shift0 = 63 & (key >> 0);
-	uint64_t bit0 = 1ULL << shift0;
-	if(missing(bag0->bmp0, bit0)) {
-		INSERT(bag0->bag0, bag0->bmp0, bit0);
-		h->count0++;
-	}
-
-	uint64_t *bucket = bag0->bag0 + lesser(bag0->bmp0, bit0);
+	uint8_t exponent = get_exponent(value);
+	uint8_t mantissa = get_mantissa(value, exponent);
+	uint64_t *bucket = get_bucket(h, exponent, mantissa, true);
+	h->bag[exponent].total += count;
+	h->total += count;
 	*bucket += count;
 }
 
+/**********************************************************************/
+
+uint64_t
+histobag_value_at_rank(histobag *h, uint64_t rank) {
+	uint8_t exponent, mantissa, position;
+	struct bag *bag;
+
+	assert(0 <= rank && rank <= h->total);
+	for(exponent = 0; exponent < BAGS; exponent++) {
+		bag = &h->bag[exponent];
+		if(rank <= bag->total) {
+			break;
+		}
+		rank -= bag->total;
+	}
+	assert(exponent < BAGS);
+
+	uint64_t *bucket = bag->bucket;
+	for(mantissa = 0; mantissa < 64; mantissa++) {
+		position = bucket_position(h, exponent, mantissa);
+		if(rank <= bucket[position]) {
+			break;
+		}
+		rank -= bucket[position];
+	}
+	assert(mantissa < 64);
+
+	uint64_t base = get_base(exponent, mantissa);
+	uint64_t range = get_range(exponent);
+	uint64_t inter = interpolate(range, rank, bucket[position]);
+	return(base + inter);
+}
+
+uint64_t
+histobag_rank_of_value(histobag *h, uint64_t value) {
+	uint8_t exponent = get_exponent(value);
+	uint8_t mantissa = get_mantissa(value, exponent);
+	uint8_t position = bucket_position(h, exponent, mantissa);
+
+	uint64_t rank = 0;
+	for(uint8_t exp = 0; exp < exponent; exp++) {
+		rank += h->bag[exp].total;
+	}
+
+	struct bag *bag = &h->bag[exponent];
+	for(uint8_t pos = 0; pos < position; pos++) {
+		rank += bag->bucket[pos];
+	}
+
+	uint64_t bit = 1ULL << mantissa;
+	if(bag->bmp & bit) {
+		uint64_t base = get_base(exponent, mantissa);
+		uint64_t range = get_range(exponent);
+		uint64_t inter = value - base;
+		rank += interpolate(bag->bucket[position], inter, range);
+	}
+
+	return(rank);
+}
+
+uint64_t
+histobag_value_at_quantile(histobag *h, double quantile) {
+	assert(0.0 <= quantile && quantile <= 1.0);
+	return(histobag_value_at_rank(h, (uint64_t)(quantile * h->total)));
+}
+
+/**********************************************************************/
+
+void
+histobag_mean_sd(histobag *h, double *pmu, double *psd) {
+	/* XXXFANF this is not numerically stable */
+	double sum = 0.0;
+	double squares = 0.0;
+	for(uint8_t exp = 0; exp < BAGS; exp++) {
+		for(uint8_t man = 0; man < 64; man++) {
+			uint64_t value = get_base(exp, man)
+				+ get_range(exp) / 2;
+			uint64_t *bucket = get_bucket(h, exp, man, false);
+			uint64_t count = (bucket == NULL) ? 0 : *bucket;
+			double total = (double)value * (double)count;
+			sum += total;
+			squares += total * (double)value;
+		}
+	}
+
+	double mean = sum / h->total;
+	double square_of_mean = mean * mean;
+	double mean_of_squares = squares / h->total;
+	double sigma = sqrt(mean_of_squares - square_of_mean);
+	OUTARG(pmu, mean);
+	OUTARG(psd, sigma);
+}
+
+/**********************************************************************/
+
 void
 histobag_validate(histobag *h) {
-	size_t count2 = 0;
-	size_t count1 = 0;
-	size_t count0 = 0;
-
-	double value = 0.0;
-	size_t count;
-
-	struct bag2 *bag2 = &h->trie;
-	uint8_t pop2 = popcount(bag2->bmp2);
-	uint64_t total2 = 0;
-	for(uint8_t i2 = 0; i2 < pop2; i2++) {
-		struct bag1 *bag1 = bag2->bag2 + i2;
-		uint8_t pop1 = popcount(bag1->bmp1);
-		uint64_t total1 = 0;
-		for(uint8_t i1 = 0; i1 < pop1; i1++) {
-			struct bag0 *bag0 = bag1->bag1 + i1;
-			uint8_t pop0 = popcount(bag0->bmp0);
-			uint64_t total0 = 0;
-			for(uint8_t i0 = 0; i0 < pop0; i0++) {
-				uint64_t *bucket = bag0->bag0 + i0;
-				double prev = value;
-				assert(histobag_next(h, &value, &count));
-				assert(prev < value);
-				assert(count == *bucket);
-				total0 += *bucket;
-				count0++;
-			}
-			assert(bag0->total0 == total0);
-			total1 += total0;
-			count1++;
+	uint64_t total = 0;
+	uint64_t baggage = 0;
+	for(uint8_t exp = 0; exp < BAGS; exp++) {
+		uint64_t subtotal = 0;
+		struct bag *bag = &h->bag[exp];
+		uint8_t count = popcount(bag->bmp);
+		for(uint8_t man = 0; man < count; man++) {
+			assert(bag->bucket[man] != 0);
+			subtotal += bag->bucket[man];
 		}
-		assert(bag1->total1 == total1);
-		total2 += total1;
-		count2++;
+		assert((subtotal == 0) == (bag->bucket == NULL));
+		assert((subtotal == 0) == (bag->bmp == 0));
+		assert(subtotal == bag->total);
+		total += subtotal;
+		baggage += count;
 	}
-	assert(bag2->total2 == total2);
-	assert(histobag_next(h, &value, &count) == false);
-
-	assert(h->count2 == count2);
-	assert(h->count1 == count1);
-	assert(h->count0 == count0);
+	assert(h->total == total);
+	assert(h->baggage == baggage);
 }
+
+/**********************************************************************/

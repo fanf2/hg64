@@ -31,18 +31,17 @@ compare(const void *ap, const void *bp) {
 
 static void
 summarize(FILE *fp, histobag *h) {
-	double value = 0.0;
-	size_t count = 0;
-	size_t max = 0;
-	while(histobag_next(h, &value, &count)) {
+	uint64_t count = 0;
+	uint64_t max = 0;
+	for(size_t i = 0; histobag_get(h, i, NULL, NULL, &count); i++) {
 		if(max < count) {
 			max = count;
 		}
 	}
 	fprintf(fp, "%zu bytes\n", histobag_size(h));
 	fprintf(fp, "%zu buckets\n", histobag_buckets(h));
-	fprintf(fp, "%zu largest\n", max);
-	fprintf(fp, "%zu samples\n", histobag_population(h));
+	fprintf(fp, "%zu largest\n", (size_t)max);
+	fprintf(fp, "%zu samples\n", (size_t)histobag_population(h));
 	/* double mu, sd; */
 	/* histobag_mean_sd(h, &mu, &sd); */
 	/* fprintf(fp, "%f mu\n", mu); */
@@ -68,7 +67,6 @@ load_data(FILE *fp, histobag *h) {
 	uint64_t t0 = nanotime();
 	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
 		histobag_add(h, data[i], 1);
-		histobag_validate(h);
 	}
 	uint64_t t1 = nanotime();
 	double nanosecs = t1 - t0;
@@ -82,7 +80,7 @@ int main(void) {
 		data[i] = rand_lemire(SAMPLE_COUNT);
 	}
 
-	histobag *h = histobag_create(1.0 / 100.0);
+	histobag *h = histobag_create();
 	load_data(stderr, h);
 	histobag_validate(h);
 	summarize(stderr, h);
