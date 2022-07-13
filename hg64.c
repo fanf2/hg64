@@ -154,8 +154,6 @@ hg64_get(hg64 *hg, size_t i,
 
 /**********************************************************************/
 
-
-
 uint64_t
 hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 	uint8_t exponent, mantissa;
