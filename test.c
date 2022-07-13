@@ -9,6 +9,8 @@
 #include "hg64.h"
 #include "random.h"
 
+extern void hg64_validate(hg64 *hg);
+
 #define NANOSECS (1000*1000*1000)
 
 static uint64_t

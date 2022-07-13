@@ -1,3 +1,12 @@
+/*
+ * hg64 - 64-bit histograms
+ *
+ * Written by Tony Finch <dot@dotat.at>
+ * You may do anything with this. It has no warranty.
+ * <https://creativecommons.org/publicdomain/zero/1.0/>
+ * SPDX-License-Identifier: CC0-1.0
+ */
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -7,6 +16,35 @@
 #include "hg64.h"
 
 #define OUTARG(ptr, val) (((ptr) != NULL) && (*(ptr) = (val)))
+
+/*
+ * This data structure is a sparse array of buckets with (almost) 12
+ * bit keys, i.e. 64 * 64.
+ *
+ * Each bucket stores a count of values belonging to the bucket's key.
+ *
+ * The upper 6 bits of the key index the `pack` array. Each `pack`
+ * contains a packed sparse array of buckets indexed by the lower 6
+ * bits of the key.
+ *
+ * A pack uses `popcount()` to avoid storing missing buckets. The
+ * `bmp` is a bitmap indicating which buckets are present. (Six bits
+ * of key can count from 0 to 63, which is all the of bits in the
+ * bitmap.) There is also a `total` of all the buckets in the `pack`
+ * so that we can work with quantiles faster.
+ *
+ * Values are uint64_t. They are mapped to buckets using a simplified
+ * floating-point format. The upper six bits of the key are the
+ * exponent, indicating the position of the most significant bit in
+ * the value. The lower 6 bits of the key are the mantissa; any less
+ * significant bits in the value are discarded, which rounds the value
+ * to its bucket's nominal value. Like IEEE 754, the most significant
+ * bit is not included in the mantissa, except for very small values
+ * (less than 64) which use a denormal format. Because of this, the
+ * number of packs is 6 less than 64.
+ *
+ * A six bit mantissa is enough to record values accurate to about 1.5%
+ */
 
 #define PACKS (64 - 6)
 
@@ -92,6 +130,9 @@ get_base(uint8_t exponent, uint8_t mantissa) {
 	return(normalized << exponent);
 }
 
+/*
+ * Here we have fun indexing into a pack, and expanding if if necessary.
+ */
 static uint64_t *
 get_bucket(hg64 *hg, uint8_t exponent, uint8_t mantissa, bool alloc) {
 	struct pack *pack = &hg->pack[exponent];
