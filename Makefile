@@ -1,11 +1,11 @@
 llvm	= /opt/homebrew/opt/llvm
 CC	= $(llvm)/bin/clang
-CFLAGS	= -g -O2 -std=c18 -Wall -Wextra -Werror -fsanitize=undefined,address
-LDFLAGS	= -g -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib -fsanitize=undefined,address
+CFLAGS	= -g -O2 -std=c18 -Wall -Wextra -Werror
+LDFLAGS	= -g -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib
 
-test: test.o histobag.o random.o
-test.o: test.c histobag.h random.h
-histobag.o: histobag.c histobag.h
+test: test.o hg64.o random.o
+test.o: test.c hg64.h random.h
+hg64.o: hg64.c hg64.h
 random.o: random.c random.h
 
 clean:

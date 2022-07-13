@@ -4,53 +4,53 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "histobag.h"
+#include "hg64.h"
 
 #define OUTARG(ptr, val) (((ptr) != NULL) && (*(ptr) = (val)))
 
-#define BAGS (64 - 6)
+#define PACKS (64 - 6)
 
-struct histobag {
+struct hg64 {
 	uint64_t total;
-	size_t baggage;
-	struct bag {
+	size_t buckets;
+	struct pack {
 		uint64_t total;
 		uint64_t bmp;
 		uint64_t *bucket;
-	} bag[BAGS];
+	} pack[PACKS];
 };
 
 /**********************************************************************/
 
-histobag *
-histobag_create(void) {
-	histobag *h = malloc(sizeof(*h));
-	*h = (histobag){ 0 };
-	return(h);
+hg64 *
+hg64_create(void) {
+	hg64 *hg = malloc(sizeof(*hg));
+	*hg = (hg64){ 0 };
+	return(hg);
 }
 
 void
-histobag_destroy(histobag *h) {
-	for(uint8_t exp = 0; exp < BAGS; exp++) {
-		free(h->bag[exp].bucket);
+hg64_destroy(hg64 *hg) {
+	for(uint8_t exp = 0; exp < PACKS; exp++) {
+		free(hg->pack[exp].bucket);
 	}
-	*h = (histobag){ 0 };
-	free(h);
+	*hg = (hg64){ 0 };
+	free(hg);
 }
 
 uint64_t
-histobag_population(histobag *h) {
-	return(h->total);
+hg64_population(hg64 *hg) {
+	return(hg->total);
 }
 
 size_t
-histobag_buckets(histobag *h) {
-	return(h->baggage);
+hg64_buckets(hg64 *hg) {
+	return(hg->buckets);
 }
 
 size_t
-histobag_size(histobag *h) {
-	return(sizeof(*h) + h->baggage * sizeof(uint64_t));
+hg64_size(hg64 *hg) {
+	return(sizeof(*hg) + hg->buckets * sizeof(uint64_t));
 }
 
 /**********************************************************************/
@@ -93,9 +93,9 @@ get_base(uint8_t exponent, uint8_t mantissa) {
 }
 
 static uint64_t *
-get_bucket(histobag *h, uint8_t exponent, uint8_t mantissa, bool alloc) {
-	struct bag *bag = &h->bag[exponent];
-	uint64_t bmp = bag->bmp;
+get_bucket(hg64 *hg, uint8_t exponent, uint8_t mantissa, bool alloc) {
+	struct pack *pack = &hg->pack[exponent];
+	uint64_t bmp = pack->bmp;
 	uint64_t bit = 1ULL << mantissa;
 	uint64_t mask = bit - 1;
 	uint8_t pos = popcount(bmp & mask);
@@ -107,54 +107,51 @@ get_bucket(histobag *h, uint8_t exponent, uint8_t mantissa, bool alloc) {
 		size_t alloc =  count + 1;
 		size_t move = count - pos;
 		size_t size = sizeof(uint64_t);
-		uint64_t *ptr = realloc(bag->bucket, alloc * size);
+		uint64_t *ptr = realloc(pack->bucket, alloc * size);
 		memmove(ptr + pos + 1, ptr + pos, move * size);
-		h->baggage += 1;
-		bag->bmp |= bit;
-		bag->bucket = ptr;
-		bag->bucket[pos] = 0;
+		hg->buckets += 1;
+		pack->bmp |= bit;
+		pack->bucket = ptr;
+		pack->bucket[pos] = 0;
 	}
-	return(&bag->bucket[pos]);
+	return(&pack->bucket[pos]);
 }
 
 static uint8_t
-bucket_position(histobag *h, uint8_t exponent, uint8_t mantissa) {
-	struct bag *bag = &h->bag[exponent];
+bucket_position(hg64 *hg, uint8_t exponent, uint8_t mantissa) {
+	struct pack *pack = &hg->pack[exponent];
 	uint64_t mask = (1ULL << mantissa) - 1;
-	return(popcount(bag->bmp & mask));
+	return(popcount(pack->bmp & mask));
 }
 
 /**********************************************************************/
 
 void
-histobag_inc(histobag *h, uint64_t value) {
-	histobag_add(h, value, 1);
+hg64_inc(hg64 *hg, uint64_t value) {
+	hg64_add(hg, value, 1);
 }
 
 void
-histobag_add(histobag *h, uint64_t value, uint64_t count) {
-	if(count == 0) {
-		return;
-	}
+hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
 	uint8_t exponent = get_exponent(value);
 	uint8_t mantissa = get_mantissa(value, exponent);
-	uint64_t *bucket = get_bucket(h, exponent, mantissa, true);
-	h->bag[exponent].total += count;
-	h->total += count;
+	uint64_t *bucket = get_bucket(hg, exponent, mantissa, true);
+	hg->pack[exponent].total += count;
+	hg->total += count;
 	*bucket += count;
 }
 
 bool
-histobag_get(histobag *h, size_t i,
+hg64_get(hg64 *hg, size_t i,
 	     uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
 	uint8_t exponent = i / 64;
 	uint8_t mantissa = i % 64;
-	if(exponent >= BAGS) {
+	if(exponent >= PACKS) {
 		return(false);
 	}
 	uint64_t min = get_base(exponent, mantissa);
 	uint64_t max = min + get_range(exponent) - 1;
-	uint64_t *bucket = get_bucket(h, exponent, mantissa, false);
+	uint64_t *bucket = get_bucket(hg, exponent, mantissa, false);
 	uint64_t count = (bucket == NULL) ? 0 : *bucket;
 	OUTARG(pmin, min);
 	OUTARG(pmax, max);
@@ -165,23 +162,23 @@ histobag_get(histobag *h, size_t i,
 /**********************************************************************/
 
 uint64_t
-histobag_value_at_rank(histobag *h, uint64_t rank) {
+hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 	uint8_t exponent, mantissa, position;
-	struct bag *bag;
+	struct pack *pack;
 
-	assert(0 <= rank && rank <= h->total);
-	for(exponent = 0; exponent < BAGS; exponent++) {
-		bag = &h->bag[exponent];
-		if(rank <= bag->total) {
+	assert(0 <= rank && rank <= hg->total);
+	for(exponent = 0; exponent < PACKS; exponent++) {
+		pack = &hg->pack[exponent];
+		if(rank <= pack->total) {
 			break;
 		}
-		rank -= bag->total;
+		rank -= pack->total;
 	}
-	assert(exponent < BAGS);
+	assert(exponent < PACKS);
 
-	uint64_t *bucket = bag->bucket;
+	uint64_t *bucket = pack->bucket;
 	for(mantissa = 0; mantissa < 64; mantissa++) {
-		position = bucket_position(h, exponent, mantissa);
+		position = bucket_position(hg, exponent, mantissa);
 		if(rank <= bucket[position]) {
 			break;
 		}
@@ -196,56 +193,56 @@ histobag_value_at_rank(histobag *h, uint64_t rank) {
 }
 
 uint64_t
-histobag_rank_of_value(histobag *h, uint64_t value) {
+hg64_rank_of_value(hg64 *hg, uint64_t value) {
 	uint8_t exponent = get_exponent(value);
 	uint8_t mantissa = get_mantissa(value, exponent);
-	uint8_t position = bucket_position(h, exponent, mantissa);
+	uint8_t position = bucket_position(hg, exponent, mantissa);
 
 	uint64_t rank = 0;
 	for(uint8_t exp = 0; exp < exponent; exp++) {
-		rank += h->bag[exp].total;
+		rank += hg->pack[exp].total;
 	}
 
-	struct bag *bag = &h->bag[exponent];
+	struct pack *pack = &hg->pack[exponent];
 	for(uint8_t pos = 0; pos < position; pos++) {
-		rank += bag->bucket[pos];
+		rank += pack->bucket[pos];
 	}
 
 	uint64_t bit = 1ULL << mantissa;
-	if(bag->bmp & bit) {
+	if(pack->bmp & bit) {
 		uint64_t base = get_base(exponent, mantissa);
 		uint64_t range = get_range(exponent);
 		uint64_t inter = value - base;
-		rank += interpolate(bag->bucket[position], inter, range);
+		rank += interpolate(pack->bucket[position], inter, range);
 	}
 
 	return(rank);
 }
 
 uint64_t
-histobag_value_at_quantile(histobag *h, double quantile) {
+hg64_value_at_quantile(hg64 *hg, double quantile) {
 	assert(0.0 <= quantile && quantile <= 1.0);
-	return(histobag_value_at_rank(h, (uint64_t)(quantile * h->total)));
+	return(hg64_value_at_rank(hg, (uint64_t)(quantile * hg->total)));
 }
 
 double
-histobag_quantile_of_value(histobag *h, uint64_t value) {
-	uint64_t rank = histobag_rank_of_value(h, value);
-	return((double)rank / (double)h->total);
+hg64_quantile_of_value(hg64 *hg, uint64_t value) {
+	uint64_t rank = hg64_rank_of_value(hg, value);
+	return((double)rank / (double)hg->total);
 }
 
 /**********************************************************************/
 
 void
-histobag_mean_variance(histobag *h, double *pmean, double *pvar) {
+hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 	/* XXXFANF this is not numerically stable */
 	double sum = 0.0;
 	double squares = 0.0;
-	for(uint8_t exp = 0; exp < BAGS; exp++) {
+	for(uint8_t exp = 0; exp < PACKS; exp++) {
 		for(uint8_t man = 0; man < 64; man++) {
 			uint64_t value = get_base(exp, man)
 				+ get_range(exp) / 2;
-			uint64_t *bucket = get_bucket(h, exp, man, false);
+			uint64_t *bucket = get_bucket(hg, exp, man, false);
 			uint64_t count = (bucket == NULL) ? 0 : *bucket;
 			double total = (double)value * (double)count;
 			sum += total;
@@ -253,9 +250,9 @@ histobag_mean_variance(histobag *h, double *pmean, double *pvar) {
 		}
 	}
 
-	double mean = sum / h->total;
+	double mean = sum / hg->total;
 	double square_of_mean = mean * mean;
-	double mean_of_squares = squares / h->total;
+	double mean_of_squares = squares / hg->total;
 	double variance = mean_of_squares - square_of_mean;
 	OUTARG(pmean, mean);
 	OUTARG(pvar, variance);
@@ -264,25 +261,25 @@ histobag_mean_variance(histobag *h, double *pmean, double *pvar) {
 /**********************************************************************/
 
 void
-histobag_validate(histobag *h) {
+hg64_validate(hg64 *hg) {
 	uint64_t total = 0;
-	uint64_t baggage = 0;
-	for(uint8_t exp = 0; exp < BAGS; exp++) {
+	uint64_t buckets = 0;
+	for(uint8_t exp = 0; exp < PACKS; exp++) {
 		uint64_t subtotal = 0;
-		struct bag *bag = &h->bag[exp];
-		uint8_t count = popcount(bag->bmp);
+		struct pack *pack = &hg->pack[exp];
+		uint8_t count = popcount(pack->bmp);
 		for(uint8_t man = 0; man < count; man++) {
-			assert(bag->bucket[man] != 0);
-			subtotal += bag->bucket[man];
+			assert(pack->bucket[man] != 0);
+			subtotal += pack->bucket[man];
 		}
-		assert((subtotal == 0) == (bag->bucket == NULL));
-		assert((subtotal == 0) == (bag->bmp == 0));
-		assert(subtotal == bag->total);
+		assert((subtotal == 0) == (pack->bucket == NULL));
+		assert((subtotal == 0) == (pack->bmp == 0));
+		assert(subtotal == pack->total);
 		total += subtotal;
-		baggage += count;
+		buckets += count;
 	}
-	assert(h->total == total);
-	assert(h->baggage == baggage);
+	assert(hg->total == total);
+	assert(hg->buckets == buckets);
 }
 
 /**********************************************************************/

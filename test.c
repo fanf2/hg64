@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "histobag.h"
+#include "hg64.h"
 #include "random.h"
 
 #define NANOSECS (1000*1000*1000)
@@ -30,27 +30,27 @@ compare(const void *ap, const void *bp) {
 }
 
 static void
-summarize(FILE *fp, histobag *h) {
+summarize(FILE *fp, hg64 *hg) {
 	uint64_t count = 0;
 	uint64_t max = 0;
-	for(size_t i = 0; histobag_get(h, i, NULL, NULL, &count); i++) {
+	for(size_t i = 0; hg64_get(hg, i, NULL, NULL, &count); i++) {
 		max = (max > count) ? max : count;
 	}
-	fprintf(fp, "%zu bytes\n", histobag_size(h));
-	fprintf(fp, "%zu buckets\n", histobag_buckets(h));
+	fprintf(fp, "%zu bytes\n", hg64_size(hg));
+	fprintf(fp, "%zu buckets\n", hg64_buckets(hg));
 	fprintf(fp, "%zu largest\n", (size_t)max);
-	fprintf(fp, "%zu samples\n", (size_t)histobag_population(h));
+	fprintf(fp, "%zu samples\n", (size_t)hg64_population(hg));
 	double mean, var;
-	histobag_mean_variance(h, &mean, &var);
+	hg64_mean_variance(hg, &mean, &var);
 	fprintf(fp, "%f mu\n", mean);
 	fprintf(fp, "%f sigma\n", sqrt(var));
 }
 
 static void
-data_vs_histo(FILE *fp, histobag *h, double q) {
+data_vs_histo(FILE *fp, hg64 *hg, double q) {
 	size_t rank = (size_t)(q * SAMPLE_COUNT);
-	uint64_t value = histobag_value_at_quantile(h, q);
-	double p = histobag_quantile_of_value(h, data[rank]);
+	uint64_t value = hg64_value_at_quantile(hg, q);
+	double p = hg64_quantile_of_value(hg, data[rank]);
 	fprintf(fp,
 		"data  %5.1f%% %8llu  "
 		"histo %5.1f%% %8llu  "
@@ -61,10 +61,10 @@ data_vs_histo(FILE *fp, histobag *h, double q) {
 }
 
 static void
-load_data(FILE *fp, histobag *h) {
+load_data(FILE *fp, hg64 *hg) {
 	uint64_t t0 = nanotime();
 	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
-		histobag_add(h, data[i], 1);
+		hg64_add(hg, data[i], 1);
 	}
 	uint64_t t1 = nanotime();
 	double nanosecs = t1 - t0;
@@ -78,10 +78,10 @@ int main(void) {
 		data[i] = rand_lemire(SAMPLE_COUNT);
 	}
 
-	histobag *h = histobag_create();
-	load_data(stderr, h);
-	histobag_validate(h);
-	summarize(stderr, h);
+	hg64 *hg = hg64_create();
+	load_data(stderr, hg);
+	hg64_validate(hg);
+	summarize(stderr, hg);
 
 	qsort(data, sizeof(data)/sizeof(*data), sizeof(*data), compare);
 
@@ -89,11 +89,11 @@ int main(void) {
 	for(double expo = -1; expo > -4; expo--) {
 		double step = pow(10, expo);
 		for(size_t n = 0; n < 9; n++) {
-			data_vs_histo(stderr, h, q);
+			data_vs_histo(stderr, hg, q);
 			q += step;
 		}
 	}
-	data_vs_histo(stderr, h, 0.999);
-	data_vs_histo(stderr, h, 0.9999);
-	data_vs_histo(stderr, h, 0.99999);
+	data_vs_histo(stderr, hg, 0.999);
+	data_vs_histo(stderr, hg, 0.9999);
+	data_vs_histo(stderr, hg, 0.99999);
 }
