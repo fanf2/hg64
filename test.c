@@ -21,11 +21,11 @@ nanotime(void) {
 #define SAMPLE_COUNT (1000*1000)
 #define BUCKET_LIMIT 1000
 
-static double data[SAMPLE_COUNT];
+static uint64_t data[SAMPLE_COUNT];
 
 static int
 compare(const void *ap, const void *bp) {
-	double a = *(double *)ap, b = *(double *)bp;
+	uint64_t a = *(uint64_t *)ap, b = *(uint64_t *)bp;
 	return(a < b ? -1 : a > b ? +1 : 0);
 }
 
@@ -34,33 +34,31 @@ summarize(FILE *fp, histobag *h) {
 	uint64_t count = 0;
 	uint64_t max = 0;
 	for(size_t i = 0; histobag_get(h, i, NULL, NULL, &count); i++) {
-		if(max < count) {
-			max = count;
-		}
+		max = (max > count) ? max : count;
 	}
 	fprintf(fp, "%zu bytes\n", histobag_size(h));
 	fprintf(fp, "%zu buckets\n", histobag_buckets(h));
 	fprintf(fp, "%zu largest\n", (size_t)max);
 	fprintf(fp, "%zu samples\n", (size_t)histobag_population(h));
-	/* double mu, sd; */
-	/* histobag_mean_sd(h, &mu, &sd); */
-	/* fprintf(fp, "%f mu\n", mu); */
-	/* fprintf(fp, "%f sigma\n", sd); */
+	double mean, var;
+	histobag_mean_variance(h, &mean, &var);
+	fprintf(fp, "%f mu\n", mean);
+	fprintf(fp, "%f sigma\n", sqrt(var));
 }
 
-/* static void */
-/* data_vs_histo(FILE *fp, histobag *h, double q) { */
-/* 	size_t rank = (size_t)(q * SAMPLE_COUNT); */
-/* 	double value = udds_value_at_quantile(h, q); */
-/* 	double p = udds_rank_of_value(h, data[rank]); */
-/* 	fprintf(fp, */
-/* 		"data  %5.1f%% %-10.7g  " */
-/* 		"histo %5.1f%% %-10.7g  " */
-/* 		"error %+f\n", */
-/* 		q * 100, data[rank], */
-/* 		p * 100, value, */
-/* 		(data[rank] - value) / data[rank]); */
-/* } */
+static void
+data_vs_histo(FILE *fp, histobag *h, double q) {
+	size_t rank = (size_t)(q * SAMPLE_COUNT);
+	uint64_t value = histobag_value_at_quantile(h, q);
+	double p = histobag_quantile_of_value(h, data[rank]);
+	fprintf(fp,
+		"data  %5.1f%% %8llu  "
+		"histo %5.1f%% %8llu  "
+		"error %+f\n",
+		q * 100, data[rank],
+		p * 100, value,
+		((double)data[rank] - (double)value) / (double)data[rank]);
+}
 
 static void
 load_data(FILE *fp, histobag *h) {
@@ -87,15 +85,15 @@ int main(void) {
 
 	qsort(data, sizeof(data)/sizeof(*data), sizeof(*data), compare);
 
-	/* double q = 0.0; */
-	/* for(double expo = -1; expo > -4; expo--) { */
-	/* 	double step = pow(10, expo); */
-	/* 	for(size_t n = 0; n < 9; n++) { */
-	/* 		data_vs_histo(stderr, h, q); */
-	/* 		q += step; */
-	/* 	} */
-	/* } */
-	/* data_vs_histo(stderr, h, 0.999); */
-	/* data_vs_histo(stderr, h, 0.9999); */
-	/* data_vs_histo(stderr, h, 0.99999); */
+	double q = 0.0;
+	for(double expo = -1; expo > -4; expo--) {
+		double step = pow(10, expo);
+		for(size_t n = 0; n < 9; n++) {
+			data_vs_histo(stderr, h, q);
+			q += step;
+		}
+	}
+	data_vs_histo(stderr, h, 0.999);
+	data_vs_histo(stderr, h, 0.9999);
+	data_vs_histo(stderr, h, 0.99999);
 }

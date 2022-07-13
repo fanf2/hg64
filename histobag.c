@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -58,7 +57,7 @@ histobag_size(histobag *h) {
 
 static inline uint64_t
 interpolate(uint64_t range, uint64_t mul, uint64_t div) {
-	double frac = (double)mul / (double)div;
+	double frac = (div == 0) ? 1 : (double)mul / (double)div;
 	return((uint64_t)(range * frac));
 }
 
@@ -84,7 +83,7 @@ get_mantissa(uint64_t value, uint8_t exponent) {
 
 static inline uint64_t
 get_range(uint8_t exponent) {
-	return((1ULL << exponent) >> 1);
+	return(exponent == 0 ? 0 : 1ULL << exponent);
 }
 
 static inline uint64_t
@@ -127,6 +126,24 @@ bucket_position(histobag *h, uint8_t exponent, uint8_t mantissa) {
 
 /**********************************************************************/
 
+void
+histobag_inc(histobag *h, uint64_t value) {
+	histobag_add(h, value, 1);
+}
+
+void
+histobag_add(histobag *h, uint64_t value, uint64_t count) {
+	if(count == 0) {
+		return;
+	}
+	uint8_t exponent = get_exponent(value);
+	uint8_t mantissa = get_mantissa(value, exponent);
+	uint64_t *bucket = get_bucket(h, exponent, mantissa, true);
+	h->bag[exponent].total += count;
+	h->total += count;
+	*bucket += count;
+}
+
 bool
 histobag_get(histobag *h, size_t i,
 	     uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
@@ -143,19 +160,6 @@ histobag_get(histobag *h, size_t i,
 	OUTARG(pmax, max);
 	OUTARG(pcount, count);
 	return(true);
-}
-
-void
-histobag_add(histobag *h, uint64_t value, uint64_t count) {
-	if(count == 0) {
-		return;
-	}
-	uint8_t exponent = get_exponent(value);
-	uint8_t mantissa = get_mantissa(value, exponent);
-	uint64_t *bucket = get_bucket(h, exponent, mantissa, true);
-	h->bag[exponent].total += count;
-	h->total += count;
-	*bucket += count;
 }
 
 /**********************************************************************/
@@ -224,10 +228,16 @@ histobag_value_at_quantile(histobag *h, double quantile) {
 	return(histobag_value_at_rank(h, (uint64_t)(quantile * h->total)));
 }
 
+double
+histobag_quantile_of_value(histobag *h, uint64_t value) {
+	uint64_t rank = histobag_rank_of_value(h, value);
+	return((double)rank / (double)h->total);
+}
+
 /**********************************************************************/
 
 void
-histobag_mean_sd(histobag *h, double *pmu, double *psd) {
+histobag_mean_variance(histobag *h, double *pmean, double *pvar) {
 	/* XXXFANF this is not numerically stable */
 	double sum = 0.0;
 	double squares = 0.0;
@@ -246,9 +256,9 @@ histobag_mean_sd(histobag *h, double *pmu, double *psd) {
 	double mean = sum / h->total;
 	double square_of_mean = mean * mean;
 	double mean_of_squares = squares / h->total;
-	double sigma = sqrt(mean_of_squares - square_of_mean);
-	OUTARG(pmu, mean);
-	OUTARG(psd, sigma);
+	double variance = mean_of_squares - square_of_mean;
+	OUTARG(pmean, mean);
+	OUTARG(pvar, variance);
 }
 
 /**********************************************************************/
