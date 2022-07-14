@@ -7,8 +7,10 @@ to record timing information in BIND, such as how long zone transfers
 take, or how long it takes to compact a qp-trie.
 
 A `hg64` is a histogram of `uint64_t` values. Values are assigned to
-buckets by rounding them with about 1.5% relative accuracy, or about
-two decimal digits of precision.
+buckets by rounding them with less than 1% relative accuracy, or about
+two decimal digits of precision. (Some quantile sketches aim to
+satisfy a particular rank error requirement; in contrast, `hg64` is
+designed around a target value error.)
 
 
 space requirements
@@ -58,13 +60,14 @@ CPU features
 ------------
 
 To find a bucket in its sparse array, `hg64` uses CLZ (count leading
-zeroes) and POPCNT (population count) compiler builtins.
+zeroes) and POPCNT (count set bits) compiler builtins.
 
 Floating point is not used when ingesting data. It is used when
 querying summary statistics about the data:
 
   * When calculating ranks and quantiles, `hg64` uses floating point
-    to interpolate within the range of a bucket.
+    multiplication and division to interpolate within the range of a
+    bucket.
 
   * The mean and variance are calculated in floating point, so that
     they are useful for histograms of small values.
@@ -94,6 +97,24 @@ Origin 1.1][dco].
 
 [cc0]: <https://creativecommons.org/publicdomain/zero/1.0/>
 [dco]: <https://developercertificate.org>
+
+
+about the name
+--------------
+
+There are several ways that `hg64` uses the number 64:
+
+  * Obviously, data values are 64 bits
+
+  * The internal number representation has an exponent with 58 values
+    and a mantissa with 64 values
+
+  * The data structure is an array of 58 elements, each of which is a
+    packed array of up to 64 buckets
+
+  * Each packed array has a 64-wide occupancy bitmap
+
+  * 58 is actually two 64s in disguise: it comes from `64 - log2(64)`
 
 
 licence
