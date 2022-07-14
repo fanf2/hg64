@@ -20,7 +20,7 @@
 /*
  * This data structure is a sparse array of buckets. Keys are usually
  * 12 bits, but the size and accuracy can be reduced by changing
- * MANBITS. (4 is a good alternative)
+ * KEYBITS. (10 is a reasonable alternative)
  *
  * Each bucket stores a count of values belonging to the bucket's key.
  *
@@ -30,7 +30,7 @@
  *
  * A pack uses `popcount()` to avoid storing missing buckets. The
  * `bmp` is a bitmap indicating which buckets are present. There is
- * also a `total` of all the buckets in the `pack` so that we can work
+ * also a `total` of all the buckets in the pack so that we can work
  * with quantiles faster.
  *
  * Values are `uint64_t`. They are mapped to buckets using a simplified
@@ -100,20 +100,14 @@ hg64_size(hg64 *hg) {
 /**********************************************************************/
 
 static inline uint64_t
-interpolate(uint64_t min, uint64_t max, uint64_t mul, uint64_t div) {
+interpolate(uint64_t span, uint64_t mul, uint64_t div) {
 	double frac = (div == 0) ? 1 : (double)mul / (double)div;
-	return((uint64_t)((max - min) * frac) + min);
+	return((uint64_t)(span * frac));
 }
 
 static inline unsigned
 popcount(uint64_t bmp) {
 	return(__builtin_popcountll((unsigned long long)bmp));
-}
-
-static inline uint64_t
-get_range(unsigned key) {
-	unsigned shift = PACKSIZE - key / MANSIZE - 1;
-	return(UINT64_MAX/4 >> shift);
 }
 
 static inline uint64_t
@@ -125,7 +119,9 @@ get_minval(unsigned key) {
 
 static inline uint64_t
 get_maxval(unsigned key) {
-	return(get_minval(key) + get_range(key));
+	unsigned shift = PACKSIZE - key / MANSIZE - 1;
+	uint64_t range = UINT64_MAX/4 >> shift;
+	return(get_minval(key) + range);
 }
 
 static inline unsigned
@@ -237,7 +233,6 @@ hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 		rank -= subtotal;
 		key += PACKSIZE;
 	}
-	assert(key < KEYS);
 
 	unsigned stop = key + PACKSIZE;
 	while(key < stop) {
@@ -248,12 +243,11 @@ hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 		rank -= count;
 		key += 1;
 	}
-	assert(key < stop);
 
 	uint64_t min = get_minval(key);
 	uint64_t max = get_maxval(key);
 	uint64_t count = get_count(hg, key);
-	return(interpolate(min, max, rank, count));
+	return(min + interpolate(max - min, rank, count));
 }
 
 uint64_t
@@ -272,7 +266,7 @@ hg64_rank_of_value(hg64 *hg, uint64_t value) {
 	uint64_t count = get_count(hg, key);
 	uint64_t min = get_minval(key);
 	uint64_t max = get_maxval(key);
-	return(interpolate(rank, rank + count, value - min, max - min));
+	return(rank + interpolate(count, value - min, max - min));
 }
 
 uint64_t
