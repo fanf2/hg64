@@ -97,6 +97,11 @@ hg64_size(hg64 *hg) {
 	return(sizeof(*hg) + hg->buckets * sizeof(uint64_t));
 }
 
+unsigned
+hg64_keybits(void) {
+	return(KEYBITS);
+}
+
 /**********************************************************************/
 
 static inline uint64_t

@@ -40,8 +40,8 @@ the histogram, and halves the maximum number of buckets.
 insertion performance
 ---------------------
 
-On my MacBook it takes about 4-7 ms to ingest a million data points
-(4-7 ns per item).
+On my MacBook it takes about 5 or 6 ms to ingest a million data points
+(5 or 6 ns per item).
 
 This includes the time it takes the data structure to warm up by
 allocating the memory needed to cover the range of values in the data
@@ -49,8 +49,8 @@ stream.
 
 This is single-threaded performance; the code does not support
 concurrent insertion by multiple threads. In a multithreaded
-application, it's best to have a histogram per thread or per CPU, and
-merge them when you need to get system-wide counts.
+application, it's best to have a histogram per thread or per CPU,
+and merge them when you need to get system-wide counts.
 
 
 building

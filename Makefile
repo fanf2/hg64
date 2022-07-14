@@ -3,9 +3,11 @@
 # <https://creativecommons.org/publicdomain/zero/1.0/>
 # SPDX-License-Identifier: CC0-1.0
 
+KEYBITS = 12
+
 #llvm	= /opt/homebrew/opt/llvm
 #CC	= $(llvm)/bin/clang
-#CFLAGS	= -g -O2 -std=c18 -Wall -Wextra -Werror -fsanitize=undefined,address
+#CFLAGS	= -g -O3 -std=c18 -Wall -Wextra -Werror -DKEYBITS=$(KEYBITS)
 #LDFLAGS = -g -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib -fsanitize=undefined,address
 
 all: test

@@ -46,6 +46,7 @@ summarize(FILE *fp, hg64 *hg) {
 	for(size_t i = 0; hg64_get(hg, i, NULL, NULL, &count); i++) {
 		max = (max > count) ? max : count;
 	}
+	fprintf(fp, "%u keybits\n", hg64_keybits());
 	fprintf(fp, "%zu bytes\n", hg64_size(hg));
 	fprintf(fp, "%zu buckets\n", hg64_buckets(hg));
 	fprintf(fp, "%zu largest\n", (size_t)max);

@@ -35,6 +35,11 @@ size_t hg64_buckets(hg64 *hg);
 size_t hg64_size(hg64 *hg);
 
 /*
+ * Get the compile-time KEYBITS setting
+ */
+unsigned hg64_keybits(void);
+
+/*
  * Add 1 to the value's bucket
  */
 void hg64_inc(hg64 *hg, uint64_t value);
