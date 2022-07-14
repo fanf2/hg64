@@ -44,10 +44,11 @@
  * number of packs is a few less than a power of 2.
  */
 
-#ifndef MANBITS
-#define MANBITS 6
+#ifndef KEYBITS
+#define KEYBITS 12
 #endif
 
+#define MANBITS (KEYBITS - 6)
 #define MANSIZE (1 << MANBITS)
 #define PACKS (MANSIZE - MANBITS)
 #define PACKSIZE 64
@@ -175,6 +176,13 @@ get_count(hg64 *hg, unsigned key) {
 	return(bucket == NULL ? 0 : *bucket);
 }
 
+static inline void
+bump_count(hg64 *hg, unsigned key, uint64_t count) {
+	hg->total += count;
+	hg->pack[key / PACKSIZE].total += count;
+	*get_bucket(hg, key, false) += count;
+}
+
 static inline uint64_t
 get_subtotal(hg64 *hg, unsigned key) {
 	return(hg->pack[key / PACKSIZE].total);
@@ -189,10 +197,7 @@ hg64_inc(hg64 *hg, uint64_t value) {
 
 void
 hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
-	unsigned key = get_key(value);
-	hg->total += count;
-	hg->pack[key / PACKSIZE].total += count;
-	*get_bucket(hg, key, false) += count;
+	bump_count(hg, get_key(value), count);
 }
 
 bool
@@ -205,6 +210,13 @@ hg64_get(hg64 *hg, unsigned key,
 		return(true);
 	} else {
 		return(false);
+	}
+}
+
+void
+hg64_merge(hg64 *target, hg64 *source) {
+	for(unsigned key = 0; key < KEYS; key++) {
+		bump_count(target, key, get_count(source, key));
 	}
 }
 

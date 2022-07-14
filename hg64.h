@@ -60,6 +60,11 @@ bool hg64_get(hg64 *hg, unsigned key,
 		  uint64_t *pmin, uint64_t *pmax, uint64_t *pcount);
 
 /*
+ * Increase the counts in `target` by the counts recorded in `source`
+ */
+void hg64_merge(hg64 *target, hg64 *source);
+
+/*
  * Get summary statistics about the histogram.
  *
  * If `pmean` is non-NULL it is set to the mean of the recorded data.

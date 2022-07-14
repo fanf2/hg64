@@ -7,18 +7,24 @@ to record timing information in BIND, such as how long zone transfers
 take, or how long it takes to compact a qp-trie.
 
 A `hg64` is a histogram of `uint64_t` values. Values are assigned to
-buckets by rounding them with less than 1% relative accuracy, or about
+buckets by rounding them with less than 1% relative error, or about
 two decimal digits of precision. (Some quantile sketches aim to
 satisfy a particular rank error requirement; in contrast, `hg64` is
 designed around a target value error.)
+
+You can adjust the number of bits used in a `hg64` key by defining the
+`KEYBITS` preprocessor macro at compile time. Smaller keys require
+less memory, but are less accurate. The default is 12 bits; 10 bits is
+a reasonable alternative.
 
 
 space requirements
 ------------------
 
-The minimum size of the histogram is 1.3 KiB, and each non-empty
-bucket uses an additional 8 bytes. There can be up to 3712 buckets,
-so the maximum size of the histogram is 30.3 KiB.
+With the default 12 bit keys, the minimum size of the histogram is 1.3
+KiB, and each non-empty bucket uses an additional 8 bytes. There can
+be up to 3712 buckets, so the maximum size of the histogram is 30.3
+KiB.
 
 It's normal to have a few hundred buckets.
 
@@ -27,19 +33,24 @@ hours, there is a factor of about a million (`2^20`) between the
 smallest and the largest times. This range can be covered by about
 `20 * 64 = 1280` buckets, or about 11 KiB.
 
+If you reduce the key size by one bit, it halves the minimum size of
+the histogram, and halves the maximum number of buckets.
+
 
 insertion performance
 ---------------------
 
-On my MacBook it takes about 4-6 ms to ingest a million data points
-(4-6 ns per item).
+On my MacBook it takes about 4-7 ms to ingest a million data points
+(4-7 ns per item).
 
 This includes the time it takes the data structure to warm up by
 allocating the memory needed to cover the range of values in the data
 stream.
 
 This is single-threaded performance; the code does not support
-concurrent insertion by multiple threads.
+concurrent insertion by multiple threads. In a multithreaded
+application, it's best to have a histogram per thread or per CPU, and
+merge them when you need to get system-wide counts.
 
 
 building
@@ -115,6 +126,8 @@ There are several ways that `hg64` uses the number 64:
   * Each packed array has a 64-wide occupancy bitmap
 
   * 58 is actually two 64s in disguise: it comes from `64 - log2(64)`
+
+Altering `KEYBITS` changes the number of bits in the mantissa.
 
 
 licence
