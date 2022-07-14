@@ -33,7 +33,7 @@
  * also a `total` of all the buckets in the `pack` so that we can work
  * with quantiles faster.
  *
- * Values are uint64_t. They are mapped to buckets using a simplified
+ * Values are `uint64_t`. They are mapped to buckets using a simplified
  * floating-point format. The upper six bits of the key are the
  * exponent, indicating the position of the most significant bit in
  * the value. The lower MANBITS of the key are the mantissa; any less
@@ -140,17 +140,12 @@ get_key(uint64_t value) {
 	}
 }
 
-static inline struct pack *
-get_pack(hg64 *hg, unsigned key) {
-	return(&hg->pack[key / PACKSIZE]);
-}
-
 /*
  * Here we have fun indexing into a pack, and expanding if if necessary.
  */
 static inline uint64_t *
 get_bucket(hg64 *hg, unsigned key, bool nullable) {
-	struct pack *pack = get_pack(hg, key);
+	struct pack *pack = &hg->pack[key / PACKSIZE];
 	uint64_t bit = 1ULL << (key % PACKSIZE);
 	uint64_t mask = bit - 1;
 	uint64_t bmp = pack->bmp;
@@ -180,6 +175,11 @@ get_count(hg64 *hg, unsigned key) {
 	return(bucket == NULL ? 0 : *bucket);
 }
 
+static inline uint64_t
+get_subtotal(hg64 *hg, unsigned key) {
+	return(hg->pack[key / PACKSIZE].total);
+}
+
 /**********************************************************************/
 
 void
@@ -190,10 +190,9 @@ hg64_inc(hg64 *hg, uint64_t value) {
 void
 hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
 	unsigned key = get_key(value);
-	uint64_t *bucket = get_bucket(hg, key, false);
-	get_pack(hg, key)->total += count;
 	hg->total += count;
-	*bucket += count;
+	hg->pack[key / PACKSIZE].total += count;
+	*get_bucket(hg, key, false) += count;
 }
 
 bool
@@ -219,11 +218,11 @@ hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 
 	unsigned key = 0;
 	while(key < KEYS) {
-		struct pack *pack = get_pack(hg, key);
-		if(rank < pack->total) {
+		uint64_t subtotal = get_subtotal(hg, key);
+		if(rank < subtotal) {
 			break;
 		}
-		rank -= pack->total;
+		rank -= subtotal;
 		key += PACKSIZE;
 	}
 	assert(key < KEYS);
@@ -252,7 +251,7 @@ hg64_rank_of_value(hg64 *hg, uint64_t value) {
 	uint64_t rank = 0;
 
 	for(unsigned k = 0; k < k0; k += PACKSIZE) {
-		rank += get_pack(hg, k)->total;
+		rank += get_subtotal(hg, k);
 	}
 	for(unsigned k = k0; k < key; k += 1) {
 		rank += get_count(hg, k);
@@ -329,7 +328,7 @@ hg64_validate(hg64 *hg) {
 	}
 
 	uint64_t total = 0;
-	uint64_t buckets = 0;
+	size_t buckets = 0;
 	for(unsigned p = 0; p < PACKS; p++) {
 		uint64_t subtotal = 0;
 		struct pack *pack = &hg->pack[p];
