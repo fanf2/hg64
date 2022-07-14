@@ -63,10 +63,11 @@ data_vs_hg64(FILE *fp, hg64 *hg, double q) {
 	fprintf(fp,
 		"data  %5.1f%% %8llu  "
 		"hg64 %5.1f%% %8llu  "
-		"error %+f\n",
+		"error value %+f rank %+f\n",
 		q * 100, data[rank],
 		p * 100, value,
-		((double)data[rank] - (double)value) / (double)data[rank]);
+		((double)data[rank] - (double)value) / (double)data[rank],
+		(q - p) / (q == 0 ? 1 : q));
 }
 
 static void
