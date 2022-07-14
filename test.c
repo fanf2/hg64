@@ -84,6 +84,17 @@ load_data(FILE *fp, hg64 *hg) {
 		nanosecs / NANOSECS, nanosecs / SAMPLE_COUNT);
 }
 
+static void
+dump_csv(FILE *fp, hg64 *hg) {
+	uint64_t value, count;
+	fprintf(fp, "value,count\n");
+	for(unsigned key = 0; hg64_get(hg, key, &value, NULL, &count); key++) {
+		if(count != 0) {
+			fprintf(fp, "%llu,%llu\n", value, count);
+		}
+	}
+}
+
 int main(void) {
 
 	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
@@ -113,4 +124,6 @@ int main(void) {
 	data_vs_hg64(stderr, hg, 0.9999);
 	data_vs_hg64(stderr, hg, 0.99999);
 	data_vs_hg64(stderr, hg, 0.999999);
+
+	dump_csv(stdout, hg);
 }

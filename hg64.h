@@ -46,7 +46,7 @@ void hg64_add(hg64 *hg, uint64_t value, uint64_t count);
 
 /*
  * Get information about a bucket. This can be used as an iterator, by
- * initializing `i` to zero and incrementing by one until `hg64_get()`
+ * initializing `key` to zero and incrementing by one until `hg64_get()`
  * returns `false`.
  *
  * If `pmin` is non-NULL it is set to the bucket's minimum inclusive value.
@@ -56,7 +56,7 @@ void hg64_add(hg64 *hg, uint64_t value, uint64_t count);
  * If `pcount` is non-NULL it is set to the bucket's counter, which
  * can be zero. (Empty buckets are included in the iterator.)
  */
-bool hg64_get(hg64 *hg, size_t i,
+bool hg64_get(hg64 *hg, unsigned key,
 		  uint64_t *pmin, uint64_t *pmax, uint64_t *pcount);
 
 /*

@@ -74,7 +74,7 @@ hg64_create(void) {
 
 void
 hg64_destroy(hg64 *hg) {
-	for(uint8_t p = 0; p < PACKS; p++) {
+	for(unsigned p = 0; p < PACKS; p++) {
 		free(hg->pack[p].bucket);
 	}
 	*hg = (hg64){ 0 };
@@ -104,44 +104,44 @@ interpolate(uint64_t min, uint64_t max, uint64_t mul, uint64_t div) {
 	return((uint64_t)((max - min) * frac) + min);
 }
 
-static inline uint8_t
+static inline unsigned
 popcount(uint64_t bmp) {
-	return((uint8_t)__builtin_popcountll((unsigned long long)bmp));
+	return(__builtin_popcountll((unsigned long long)bmp));
 }
 
 static inline uint64_t
-get_range(uint16_t key) {
-	uint16_t shift = PACKSIZE - key / MANSIZE - 1;
+get_range(unsigned key) {
+	unsigned shift = PACKSIZE - key / MANSIZE - 1;
 	return(UINT64_MAX/4 >> shift);
 }
 
 static inline uint64_t
-get_minval(uint16_t key) {
-	uint16_t exponent = key / MANSIZE - 1;
+get_minval(unsigned key) {
+	unsigned exponent = key / MANSIZE - 1;
 	uint64_t mantissa = key % MANSIZE + MANSIZE;
 	return(key < MANSIZE ? key : mantissa << exponent);
 }
 
 static inline uint64_t
-get_maxval(uint16_t key) {
+get_maxval(unsigned key) {
 	return(get_minval(key) + get_range(key));
 }
 
-static inline uint16_t
+static inline unsigned
 get_key(uint64_t value) {
 	if(value < MANSIZE) {
 		return(value); /* denormal */
 	} else {
-		int clz = __builtin_clzll((unsigned long long)value);
-		uint16_t exponent = PACKSIZE - MANBITS - clz;
-		uint16_t mantissa = (value >> (exponent - 1)) % MANSIZE;
-		uint16_t key = exponent * MANSIZE + mantissa;
+		unsigned clz = __builtin_clzll((unsigned long long)value);
+		unsigned exponent = PACKSIZE - MANBITS - clz;
+		unsigned mantissa = value >> (exponent - 1);
+		unsigned key = exponent * MANSIZE + mantissa % MANSIZE;
 		return(key);
 	}
 }
 
 static inline struct pack *
-get_pack(hg64 *hg, uint16_t key) {
+get_pack(hg64 *hg, unsigned key) {
 	return(&hg->pack[key / PACKSIZE]);
 }
 
@@ -149,33 +149,34 @@ get_pack(hg64 *hg, uint16_t key) {
  * Here we have fun indexing into a pack, and expanding if if necessary.
  */
 static inline uint64_t *
-get_bucket(hg64 *hg, uint16_t key, bool alloc) {
+get_bucket(hg64 *hg, unsigned key, bool nullable) {
 	struct pack *pack = get_pack(hg, key);
 	uint64_t bit = 1ULL << (key % PACKSIZE);
 	uint64_t mask = bit - 1;
 	uint64_t bmp = pack->bmp;
-	uint8_t pos = popcount(bmp & mask);
-	if((bmp & bit) == 0) {
-		if(!alloc) {
-			return(NULL);
-		}
-		uint8_t count = popcount(bmp);
-		size_t need = count + 1;
-		size_t move = count - pos;
-		size_t size = sizeof(uint64_t);
-		uint64_t *ptr = realloc(pack->bucket, need * size);
-		memmove(ptr + pos + 1, ptr + pos, move * size);
-		hg->buckets += 1;
-		pack->bmp |= bit;
-		pack->bucket = ptr;
-		pack->bucket[pos] = 0;
+	unsigned pos = popcount(bmp & mask);
+	if(bmp & bit) {
+		return(&pack->bucket[pos]);
 	}
+	if(nullable) {
+		return(NULL);
+	}
+	unsigned pop = popcount(bmp);
+	size_t need = pop + 1;
+	size_t move = pop - pos;
+	size_t size = sizeof(uint64_t);
+	uint64_t *ptr = realloc(pack->bucket, need * size);
+	memmove(ptr + pos + 1, ptr + pos, move * size);
+	hg->buckets += 1;
+	pack->bmp |= bit;
+	pack->bucket = ptr;
+	pack->bucket[pos] = 0;
 	return(&pack->bucket[pos]);
 }
 
 static inline uint64_t
-get_count(hg64 *hg, uint16_t key) {
-	uint64_t *bucket = get_bucket(hg, key, false);
+get_count(hg64 *hg, unsigned key) {
+	uint64_t *bucket = get_bucket(hg, key, true);
 	return(bucket == NULL ? 0 : *bucket);
 }
 
@@ -188,17 +189,17 @@ hg64_inc(hg64 *hg, uint64_t value) {
 
 void
 hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
-	uint16_t key = get_key(value);
-	uint64_t *bucket = get_bucket(hg, key, true);
+	unsigned key = get_key(value);
+	uint64_t *bucket = get_bucket(hg, key, false);
 	get_pack(hg, key)->total += count;
 	hg->total += count;
 	*bucket += count;
 }
 
 bool
-hg64_get(hg64 *hg, size_t key,
+hg64_get(hg64 *hg, unsigned key,
 	     uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
-	if(key / KEYS) {
+	if(key < KEYS) {
 		OUTARG(pmin, get_minval(key));
 		OUTARG(pmax, get_maxval(key));
 		OUTARG(pcount, get_count(hg, key));
@@ -216,7 +217,7 @@ hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 		return(UINT64_MAX);
 	}
 
-	uint16_t key = 0;
+	unsigned key = 0;
 	while(key < KEYS) {
 		struct pack *pack = get_pack(hg, key);
 		if(rank < pack->total) {
@@ -227,7 +228,7 @@ hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 	}
 	assert(key < KEYS);
 
-	uint16_t stop = key + PACKSIZE;
+	unsigned stop = key + PACKSIZE;
 	while(key < stop) {
 		uint64_t count = get_count(hg, key);
 		if(rank < count) {
@@ -246,14 +247,14 @@ hg64_value_at_rank(hg64 *hg, uint64_t rank) {
 
 uint64_t
 hg64_rank_of_value(hg64 *hg, uint64_t value) {
-	uint16_t key = get_key(value);
-	uint16_t k0 = key - key % PACKSIZE;
+	unsigned key = get_key(value);
+	unsigned k0 = key - key % PACKSIZE;
 	uint64_t rank = 0;
 
-	for(uint16_t k = 0; k < k0; k += PACKSIZE) {
+	for(unsigned k = 0; k < k0; k += PACKSIZE) {
 		rank += get_pack(hg, k)->total;
 	}
-	for(uint16_t k = k0; k < key; k += 1) {
+	for(unsigned k = k0; k < key; k += 1) {
 		rank += get_count(hg, k);
 	}
 
@@ -282,7 +283,7 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 	/* XXX this is not numerically stable */
 	double sum = 0.0;
 	double squares = 0.0;
-	for(uint16_t key = 0; key < KEYS; key++) {
+	for(unsigned key = 0; key < KEYS; key++) {
 		uint64_t value = (get_minval(key) + get_maxval(key)) / 2;
 		uint64_t count = get_count(hg, key);
 		double total = (double)value * (double)count;
@@ -302,7 +303,7 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 
 static void
 validate_value(uint64_t value) {
-		uint16_t key = get_key(value);
+		unsigned key = get_key(value);
 		uint64_t min = get_minval(key);
 		uint64_t max = get_maxval(key);
 		assert(value >= min);
@@ -323,17 +324,17 @@ hg64_validate(hg64 *hg) {
 	for(uint64_t value = max; value > min; value -= step) {
 		validate_value(value);
 	}
-	for(uint16_t key = 1; key < KEYS; key++) {
+	for(unsigned key = 1; key < KEYS; key++) {
 		assert(get_maxval(key - 1) < get_minval(key));
 	}
 
 	uint64_t total = 0;
 	uint64_t buckets = 0;
-	for(uint8_t p = 0; p < PACKS; p++) {
+	for(unsigned p = 0; p < PACKS; p++) {
 		uint64_t subtotal = 0;
 		struct pack *pack = &hg->pack[p];
-		uint8_t count = popcount(pack->bmp);
-		for(uint8_t pos = 0; pos < count; pos++) {
+		unsigned count = popcount(pack->bmp);
+		for(unsigned pos = 0; pos < count; pos++) {
 			assert(pack->bucket[pos] != 0);
 			subtotal += pack->bucket[pos];
 		}
