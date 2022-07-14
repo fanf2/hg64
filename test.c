@@ -34,7 +34,8 @@ static uint64_t data[SAMPLE_COUNT];
 
 static int
 compare(const void *ap, const void *bp) {
-	uint64_t a = *(uint64_t *)ap, b = *(uint64_t *)bp;
+	uint64_t a = *(uint64_t *)ap;
+	uint64_t b = *(uint64_t *)bp;
 	return(a < b ? -1 : a > b ? +1 : 0);
 }
 
@@ -60,13 +61,14 @@ data_vs_hg64(FILE *fp, hg64 *hg, double q) {
 	size_t rank = (size_t)(q * SAMPLE_COUNT);
 	uint64_t value = hg64_value_at_quantile(hg, q);
 	double p = hg64_quantile_of_value(hg, data[rank]);
+	double div = data[rank] == 0 ? 1 : data[rank];
 	fprintf(fp,
 		"data  %5.1f%% %8llu  "
 		"hg64 %5.1f%% %8llu  "
 		"error value %+f rank %+f\n",
 		q * 100, data[rank],
 		p * 100, value,
-		((double)data[rank] - (double)value) / (double)data[rank],
+		((double)data[rank] - (double)value) / div,
 		(q - p) / (q == 0 ? 1 : q));
 }
 
@@ -85,7 +87,11 @@ load_data(FILE *fp, hg64 *hg) {
 int main(void) {
 
 	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
-		data[i] = (rand_normal() + 6) * SAMPLE_COUNT;
+		if(i < 256) {
+			data[i] = i;
+		} else {
+			data[i] = rand_lemire(SAMPLE_COUNT);
+		}
 	}
 
 	hg64 *hg = hg64_create();

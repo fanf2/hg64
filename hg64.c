@@ -18,35 +18,40 @@
 #define OUTARG(ptr, val) (((ptr) != NULL) && !(*(ptr) = (val)))
 
 /*
- * This data structure is a sparse array of buckets with (almost) 12
- * bit keys, i.e. 64 * 64.
+ * This data structure is a sparse array of buckets. Keys are usually
+ * 12 bits, but the size and accuracy can be reduced by changing
+ * MANBITS. (4 is a good alternative)
  *
  * Each bucket stores a count of values belonging to the bucket's key.
  *
- * The upper 6 bits of the key index the `pack` array. Each `pack`
- * contains a packed sparse array of buckets indexed by the lower 6
- * bits of the key.
+ * The upper MANBITS of the key index the `pack` array. Each `pack`
+ * contains a packed sparse array of buckets indexed by the lower
+ * `log2(PACKSIZE) == 6` bits of the key.
  *
  * A pack uses `popcount()` to avoid storing missing buckets. The
- * `bmp` is a bitmap indicating which buckets are present. (Six bits
- * of key can count from 0 to 63, which is all the of bits in the
- * bitmap.) There is also a `total` of all the buckets in the `pack`
- * so that we can work with quantiles faster.
+ * `bmp` is a bitmap indicating which buckets are present. There is
+ * also a `total` of all the buckets in the `pack` so that we can work
+ * with quantiles faster.
  *
  * Values are uint64_t. They are mapped to buckets using a simplified
  * floating-point format. The upper six bits of the key are the
  * exponent, indicating the position of the most significant bit in
- * the value. The lower 6 bits of the key are the mantissa; any less
+ * the value. The lower MANBITS of the key are the mantissa; any less
  * significant bits in the value are discarded, which rounds the value
  * to its bucket's nominal value. Like IEEE 754, the most significant
  * bit is not included in the mantissa, except for very small values
- * (less than 64) which use a denormal format. Because of this, the
- * number of packs is 6 less than 64.
- *
- * A six bit mantissa is enough to record values accurate to about 1.5%
+ * (less than MANSIZE) which use a denormal format. Because of this, the
+ * number of packs is a few less than a power of 2.
  */
 
-#define PACKS (64 - 6)
+#ifndef MANBITS
+#define MANBITS 6
+#endif
+
+#define MANSIZE (1 << MANBITS)
+#define PACKS (MANSIZE - MANBITS)
+#define PACKSIZE 64
+#define KEYS (PACKS * PACKSIZE)
 
 struct hg64 {
 	uint64_t total;
@@ -69,8 +74,8 @@ hg64_create(void) {
 
 void
 hg64_destroy(hg64 *hg) {
-	for(uint8_t exp = 0; exp < PACKS; exp++) {
-		free(hg->pack[exp].bucket);
+	for(uint8_t p = 0; p < PACKS; p++) {
+		free(hg->pack[p].bucket);
 	}
 	*hg = (hg64){ 0 };
 	free(hg);
@@ -94,9 +99,9 @@ hg64_size(hg64 *hg) {
 /**********************************************************************/
 
 static inline uint64_t
-interpolate(uint64_t range, uint64_t mul, uint64_t div) {
+interpolate(uint64_t min, uint64_t max, uint64_t mul, uint64_t div) {
 	double frac = (div == 0) ? 1 : (double)mul / (double)div;
-	return((uint64_t)(range * frac));
+	return((uint64_t)((max - min) * frac) + min);
 }
 
 static inline uint8_t
@@ -104,41 +109,51 @@ popcount(uint64_t bmp) {
 	return((uint8_t)__builtin_popcountll((unsigned long long)bmp));
 }
 
-static inline uint8_t
-get_exponent(uint64_t value) {
-	if(value < 64) {
-		return(0); /* denormal */
+static inline uint64_t
+get_range(uint16_t key) {
+	uint16_t shift = PACKSIZE - key / MANSIZE - 1;
+	return(UINT64_MAX/4 >> shift);
+}
+
+static inline uint64_t
+get_minval(uint16_t key) {
+	uint16_t exponent = key / MANSIZE - 1;
+	uint64_t mantissa = key % MANSIZE + MANSIZE;
+	return(key < MANSIZE ? key : mantissa << exponent);
+}
+
+static inline uint64_t
+get_maxval(uint16_t key) {
+	return(get_minval(key) + get_range(key));
+}
+
+static inline uint16_t
+get_key(uint64_t value) {
+	if(value < MANSIZE) {
+		return(value); /* denormal */
 	} else {
 		int clz = __builtin_clzll((unsigned long long)value);
-		return((uint8_t)(63 - clz - 6));
+		uint16_t exponent = PACKSIZE - MANBITS - clz;
+		uint16_t mantissa = (value >> (exponent - 1)) % MANSIZE;
+		uint16_t key = exponent * MANSIZE + mantissa;
+		return(key);
 	}
 }
 
-static inline uint8_t
-get_mantissa(uint64_t value, uint8_t exponent) {
-	return((value >> exponent) & 63);
-}
-
-static inline uint64_t
-get_range(uint8_t exponent) {
-	return(exponent == 0 ? 0 : 1ULL << exponent);
-}
-
-static inline uint64_t
-get_base(uint8_t exponent, uint8_t mantissa) {
-	uint64_t normalized = mantissa | (exponent == 0 ? 0 : 64);
-	return(normalized << exponent);
+static inline struct pack *
+get_pack(hg64 *hg, uint16_t key) {
+	return(&hg->pack[key / PACKSIZE]);
 }
 
 /*
  * Here we have fun indexing into a pack, and expanding if if necessary.
  */
-static uint64_t *
-get_bucket(hg64 *hg, uint8_t exponent, uint8_t mantissa, bool alloc) {
-	struct pack *pack = &hg->pack[exponent];
-	uint64_t bmp = pack->bmp;
-	uint64_t bit = 1ULL << mantissa;
+static inline uint64_t *
+get_bucket(hg64 *hg, uint16_t key, bool alloc) {
+	struct pack *pack = get_pack(hg, key);
+	uint64_t bit = 1ULL << (key % PACKSIZE);
 	uint64_t mask = bit - 1;
+	uint64_t bmp = pack->bmp;
 	uint8_t pos = popcount(bmp & mask);
 	if((bmp & bit) == 0) {
 		if(!alloc) {
@@ -158,6 +173,12 @@ get_bucket(hg64 *hg, uint8_t exponent, uint8_t mantissa, bool alloc) {
 	return(&pack->bucket[pos]);
 }
 
+static inline uint64_t
+get_count(hg64 *hg, uint16_t key) {
+	uint64_t *bucket = get_bucket(hg, key, false);
+	return(bucket == NULL ? 0 : *bucket);
+}
+
 /**********************************************************************/
 
 void
@@ -167,99 +188,85 @@ hg64_inc(hg64 *hg, uint64_t value) {
 
 void
 hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
-	uint8_t exponent = get_exponent(value);
-	uint8_t mantissa = get_mantissa(value, exponent);
-	uint64_t *bucket = get_bucket(hg, exponent, mantissa, true);
-	hg->pack[exponent].total += count;
+	uint16_t key = get_key(value);
+	uint64_t *bucket = get_bucket(hg, key, true);
+	get_pack(hg, key)->total += count;
 	hg->total += count;
 	*bucket += count;
 }
 
 bool
-hg64_get(hg64 *hg, size_t i,
+hg64_get(hg64 *hg, size_t key,
 	     uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
-	uint8_t exponent = i / 64;
-	uint8_t mantissa = i % 64;
-	if(exponent >= PACKS) {
+	if(key / KEYS) {
+		OUTARG(pmin, get_minval(key));
+		OUTARG(pmax, get_maxval(key));
+		OUTARG(pcount, get_count(hg, key));
+		return(true);
+	} else {
 		return(false);
 	}
-	uint64_t min = get_base(exponent, mantissa);
-	uint64_t max = min + get_range(exponent) - 1;
-	uint64_t *bucket = get_bucket(hg, exponent, mantissa, false);
-	uint64_t count = (bucket == NULL) ? 0 : *bucket;
-	OUTARG(pmin, min);
-	OUTARG(pmax, max);
-	OUTARG(pcount, count);
-	return(true);
 }
 
 /**********************************************************************/
 
 uint64_t
 hg64_value_at_rank(hg64 *hg, uint64_t rank) {
-	uint8_t exponent, mantissa;
-	uint64_t *bucket = NULL;
-	struct pack *pack;
+	if(rank >= hg->total) {
+		return(UINT64_MAX);
+	}
 
-	assert(0 <= rank && rank < hg->total);
-	for(exponent = 0; exponent < PACKS; exponent++) {
-		pack = &hg->pack[exponent];
+	uint16_t key = 0;
+	while(key < KEYS) {
+		struct pack *pack = get_pack(hg, key);
 		if(rank < pack->total) {
 			break;
 		}
 		rank -= pack->total;
+		key += PACKSIZE;
 	}
-	assert(exponent < PACKS);
+	assert(key < KEYS);
 
-	for(mantissa = 0; mantissa < 64; mantissa++) {
-		bucket = get_bucket(hg, exponent, mantissa, false);
-		if(bucket == NULL) {
-			continue;
-		} else if(rank < *bucket) {
+	uint16_t stop = key + PACKSIZE;
+	while(key < stop) {
+		uint64_t count = get_count(hg, key);
+		if(rank < count) {
 			break;
-		} else {
-			rank -= *bucket;
 		}
+		rank -= count;
+		key += 1;
 	}
-	assert(mantissa < 64);
+	assert(key < stop);
 
-	uint64_t base = get_base(exponent, mantissa);
-	uint64_t range = get_range(exponent);
-	uint64_t inter = interpolate(range, rank, *bucket);
-	return(base + inter);
+	uint64_t min = get_minval(key);
+	uint64_t max = get_maxval(key);
+	uint64_t count = get_count(hg, key);
+	return(interpolate(min, max, rank, count));
 }
 
 uint64_t
 hg64_rank_of_value(hg64 *hg, uint64_t value) {
-	uint8_t exponent = get_exponent(value);
-	uint8_t mantissa = get_mantissa(value, exponent);
-	uint64_t *bucket = get_bucket(hg, exponent, mantissa, false);
-
+	uint16_t key = get_key(value);
+	uint16_t k0 = key - key % PACKSIZE;
 	uint64_t rank = 0;
-	for(uint8_t exp = 0; exp < exponent; exp++) {
-		rank += hg->pack[exp].total;
+
+	for(uint16_t k = 0; k < k0; k += PACKSIZE) {
+		rank += get_pack(hg, k)->total;
+	}
+	for(uint16_t k = k0; k < key; k += 1) {
+		rank += get_count(hg, k);
 	}
 
-	struct pack *pack = &hg->pack[exponent];
-	for(uint8_t pos = 0; &pack->bucket[pos] < bucket; pos++) {
-		rank += pack->bucket[pos];
-	}
-
-	uint64_t bit = 1ULL << mantissa;
-	if(pack->bmp & bit) {
-		uint64_t base = get_base(exponent, mantissa);
-		uint64_t range = get_range(exponent);
-		uint64_t inter = value - base;
-		rank += interpolate(*bucket, inter, range);
-	}
-
-	return(rank);
+	uint64_t count = get_count(hg, key);
+	uint64_t min = get_minval(key);
+	uint64_t max = get_maxval(key);
+	return(interpolate(rank, rank + count, value - min, max - min));
 }
 
 uint64_t
-hg64_value_at_quantile(hg64 *hg, double quantile) {
-	assert(0.0 <= quantile && quantile <= 1.0);
-	return(hg64_value_at_rank(hg, (uint64_t)(quantile * hg->total)));
+hg64_value_at_quantile(hg64 *hg, double q) {
+	double rank = (q < 0.0 ? 0.0 : q > 1.0 ? 1.0 : q) * hg->total;
+	return(hg64_value_at_rank(hg, (uint64_t)rank));
 }
 
 double
@@ -272,19 +279,15 @@ hg64_quantile_of_value(hg64 *hg, uint64_t value) {
 
 void
 hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
-	/* XXXFANF this is not numerically stable */
+	/* XXX this is not numerically stable */
 	double sum = 0.0;
 	double squares = 0.0;
-	for(uint8_t exp = 0; exp < PACKS; exp++) {
-		for(uint8_t man = 0; man < 64; man++) {
-			uint64_t value = get_base(exp, man)
-				+ get_range(exp) / 2;
-			uint64_t *bucket = get_bucket(hg, exp, man, false);
-			uint64_t count = (bucket == NULL) ? 0 : *bucket;
-			double total = (double)value * (double)count;
-			sum += total;
-			squares += total * (double)value;
-		}
+	for(uint16_t key = 0; key < KEYS; key++) {
+		uint64_t value = (get_minval(key) + get_maxval(key)) / 2;
+		uint64_t count = get_count(hg, key);
+		double total = (double)value * (double)count;
+		sum += total;
+		squares += total * (double)value;
 	}
 
 	double mean = sum / hg->total;
@@ -297,17 +300,42 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 
 /**********************************************************************/
 
+static void
+validate_value(uint64_t value) {
+		uint16_t key = get_key(value);
+		uint64_t min = get_minval(key);
+		uint64_t max = get_maxval(key);
+		assert(value >= min);
+		assert(value <= max);
+}
+
 void
 hg64_validate(hg64 *hg) {
+	uint64_t min = 0, max = 1ULL << 16, step = 1ULL;
+	for(uint64_t value = 0; value < max; value += step) {
+		validate_value(value);
+	}
+	min = 1ULL << 30, max = 1ULL << 40, step = 1ULL << 20;
+	for(uint64_t value = min; value < max; value += step) {
+		validate_value(value);
+	}
+	max = UINT64_MAX, min = max >> 8, step = max >> 10;
+	for(uint64_t value = max; value > min; value -= step) {
+		validate_value(value);
+	}
+	for(uint16_t key = 1; key < KEYS; key++) {
+		assert(get_maxval(key - 1) < get_minval(key));
+	}
+
 	uint64_t total = 0;
 	uint64_t buckets = 0;
-	for(uint8_t exp = 0; exp < PACKS; exp++) {
+	for(uint8_t p = 0; p < PACKS; p++) {
 		uint64_t subtotal = 0;
-		struct pack *pack = &hg->pack[exp];
+		struct pack *pack = &hg->pack[p];
 		uint8_t count = popcount(pack->bmp);
-		for(uint8_t man = 0; man < count; man++) {
-			assert(pack->bucket[man] != 0);
-			subtotal += pack->bucket[man];
+		for(uint8_t pos = 0; pos < count; pos++) {
+			assert(pack->bucket[pos] != 0);
+			subtotal += pack->bucket[pos];
 		}
 		assert((subtotal == 0) == (pack->bucket == NULL));
 		assert((subtotal == 0) == (pack->bmp == 0));
