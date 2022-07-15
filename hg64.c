@@ -67,12 +67,12 @@ struct hg64 {
 static inline uint64_t
 interpolate(uint64_t span, uint64_t mul, uint64_t div) {
 	double frac = (div == 0) ? 1 : (double)mul / (double)div;
-	return((uint64_t)((double)span * frac));
+	return((uint64_t)(span * frac));
 }
 
 static inline unsigned
 popcount(uint64_t bmp) {
-	return((unsigned)__builtin_popcountll((unsigned long long)bmp));
+	return(__builtin_popcountll((unsigned long long)bmp));
 }
 
 /**********************************************************************/
@@ -142,11 +142,11 @@ static inline unsigned
 get_key(uint64_t value) {
 	/* hot path */
 	if(value < MANSIZE) {
-		return((unsigned)value); /* denormal */
+		return(value); /* denormal */
 	} else {
 		int clz = __builtin_clzll((unsigned long long)value);
-		unsigned exponent = (unsigned)(PACKSIZE - MANBITS - clz);
-		unsigned mantissa = (unsigned)(value >> (exponent - 1));
+		unsigned exponent = PACKSIZE - MANBITS - clz;
+		unsigned mantissa = value >> (exponent - 1);
 		return(exponent * MANSIZE + mantissa % MANSIZE);
 	}
 }
@@ -172,9 +172,8 @@ get_bucket(hg64 *hg, unsigned key, bool nullable) {
 	unsigned pop = popcount(bmp);
 	size_t need = pop + 1;
 	size_t move = pop - pos;
-	size_t size = sizeof(uint64_t);
-	uint64_t *ptr = realloc(pack->bucket, need * size);
-	memmove(ptr + pos + 1, ptr + pos, move * size);
+	uint64_t *ptr = realloc(pack->bucket, need * sizeof(uint64_t));
+	memmove(ptr + pos + 1, ptr + pos, move * sizeof(uint64_t));
 	pack->bmp |= bit;
 	pack->bucket = ptr;
 	pack->bucket[pos] = 0;
@@ -215,7 +214,7 @@ hg64_inc(hg64 *hg, uint64_t value) {
 
 bool
 hg64_get(hg64 *hg, unsigned key,
-	     uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
+		uint64_t *pmin, uint64_t *pmax, uint64_t *pcount) {
 	if(key < KEYS) {
 		OUTARG(pmin, get_minval(key));
 		OUTARG(pmax, get_maxval(key));
