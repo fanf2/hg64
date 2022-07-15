@@ -20,17 +20,17 @@ hg64 *hg64_create(void);
 void hg64_destroy(hg64 *hg);
 
 /*
- * Get the total of all the buckets in the histogram
+ * Calculate the total count of all the buckets in the histogram
  */
 uint64_t hg64_population(hg64 *hg);
 
 /*
- * Get the number of buckets
+ * Calculate the number of buckets
  */
 size_t hg64_buckets(hg64 *hg);
 
 /*
- * Get the memory used in bytes
+ * Calculate the memory used in bytes
  */
 size_t hg64_size(hg64 *hg);
 
