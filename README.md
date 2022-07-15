@@ -12,6 +12,10 @@ two decimal digits of precision. (Some quantile sketches aim to
 satisfy a particular rank error requirement; in contrast, `hg64` is
 designed around a target value error.)
 
+The size of a `hg64` histogram depends on the range of values in the
+data stream, not the length of the data stream. The update performance
+is roughly constant, and mostly depends on cache locality.
+
 You can adjust the number of bits used in a `hg64` key by defining the
 `KEYBITS` preprocessor macro at compile time. Smaller keys require
 less memory, but are less accurate. The default is 12 bits; 10 bits is
@@ -40,8 +44,8 @@ the histogram, and halves the maximum number of buckets.
 insertion performance
 ---------------------
 
-On my MacBook it takes 4 or 5 ms to ingest a million data points
-(4 or 5 ns per item).
+A microbenchmark on my MacBook takes 4 or 5 ms to ingest a million
+data points (4 or 5 ns per item).
 
 This includes the time it takes the data structure to warm up by
 allocating the memory needed to cover the range of values in the data
