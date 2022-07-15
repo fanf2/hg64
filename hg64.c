@@ -130,28 +130,28 @@ get_maxval(unsigned key) {
 }
 
 /*
- * in principle this CLZ business could be done by the CPU's floating
- * point unit: first, convert the value to a float and get the bits of
- * the float in an integer so that we can pick them apart
+ * In principle the CLZ business below could be done by the CPU's
+ * floating point unit: first, convert the value to a float and get the
+ * bits of the float in an integer so that we can pick them apart
  *
  *	float fpval = (float)value;
  *	uint32_t fpbits = 0;
  *	memcpy(&fpbits, &fpval, sizeof(fpbits));
  *
  * then shift the number so that we have the amount of mantissa we want;
- * there is one sign bit (which is zero because the value is positive)
- * and 8 bits of exponent
+ * (23 is the number of mantissa bits in an IEEE754 float)
  *
- *	unsigned key = fpbits >> (32 - 1 - 8 - MANBITS);
+ *	unsigned key = fpbits >> (23 - MANBITS);
  *
- * finally, adjust the exponent to change the ieee 754 bias to our bias
+ * finally, adjust the exponent to change the IEEE754 bias to our bias
  *
  *	key -= (127 + MANBITS - 1) * MANSIZE;
  *
  * However this floating point hack has very weird rounding: the cast to
  * float rounds to nearest, then the shift truncates. The code below
  * only truncates, so it is more consistent. There doesn't seem to be a
- * neat way to fix the rounding, so the integer bithacking is faster.
+ * neat way to fix the rounding, and even if we ignore that problem, the
+ * fp hack is neither simpler nor faster than pure integer bithacking.
  */
 
 static inline unsigned
