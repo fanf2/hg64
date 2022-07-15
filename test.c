@@ -28,14 +28,13 @@ nanotime(void) {
 }
 
 #define SAMPLE_COUNT (1000*1000)
-#define BUCKET_LIMIT 1000
 
 static uint64_t data[SAMPLE_COUNT];
 
 static int
 compare(const void *ap, const void *bp) {
-	uint64_t a = *(uint64_t *)ap;
-	uint64_t b = *(uint64_t *)bp;
+	uint64_t a = *(const uint64_t *)ap;
+	uint64_t b = *(const uint64_t *)bp;
 	return(a < b ? -1 : a > b ? +1 : 0);
 }
 
@@ -43,7 +42,7 @@ static void
 summarize(FILE *fp, hg64 *hg) {
 	uint64_t count = 0;
 	uint64_t max = 0;
-	for(size_t i = 0; hg64_get(hg, i, NULL, NULL, &count); i++) {
+	for(unsigned key = 0; hg64_get(hg, key, NULL, NULL, &count); key++) {
 		max = (max > count) ? max : count;
 	}
 	fprintf(fp, "%u keybits\n", hg64_keybits());
@@ -62,7 +61,7 @@ data_vs_hg64(FILE *fp, hg64 *hg, double q) {
 	size_t rank = (size_t)(q * SAMPLE_COUNT);
 	uint64_t value = hg64_value_at_quantile(hg, q);
 	double p = hg64_quantile_of_value(hg, data[rank]);
-	double div = data[rank] == 0 ? 1 : data[rank];
+	double div = data[rank] == 0 ? 1 : (double)data[rank];
 	fprintf(fp,
 		"data  %5.1f%% %8llu  "
 		"hg64 %5.1f%% %8llu  "
@@ -70,7 +69,7 @@ data_vs_hg64(FILE *fp, hg64 *hg, double q) {
 		q * 100, data[rank],
 		p * 100, value,
 		((double)data[rank] - (double)value) / div,
-		(q - p) / (q == 0 ? 1 : q));
+		(q - p) / (q == 0.0 ? 1.0 : q));
 }
 
 static void
@@ -80,7 +79,7 @@ load_data(FILE *fp, hg64 *hg) {
 		hg64_add(hg, data[i], 1);
 	}
 	uint64_t t1 = nanotime();
-	double nanosecs = t1 - t0;
+	double nanosecs = (double)(t1 - t0);
 	fprintf(fp, "%f load time %.2f ns per item\n",
 		nanosecs / NANOSECS, nanosecs / SAMPLE_COUNT);
 }

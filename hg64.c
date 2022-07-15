@@ -15,7 +15,7 @@
 
 #include "hg64.h"
 
-#define OUTARG(ptr, val) (((ptr) != NULL) && !(*(ptr) = (val)))
+#define OUTARG(ptr, val) (((ptr) != NULL) && (bool)(*(ptr) = (val)))
 
 /*
  * This data structure is a sparse array of buckets. Keys are usually
@@ -107,12 +107,12 @@ hg64_keybits(void) {
 static inline uint64_t
 interpolate(uint64_t span, uint64_t mul, uint64_t div) {
 	double frac = (div == 0) ? 1 : (double)mul / (double)div;
-	return((uint64_t)(span * frac));
+	return((uint64_t)((double)span * frac));
 }
 
 static inline unsigned
 popcount(uint64_t bmp) {
-	return(__builtin_popcountll((unsigned long long)bmp));
+	return((unsigned)__builtin_popcountll((unsigned long long)bmp));
 }
 
 static inline uint64_t
@@ -129,16 +129,40 @@ get_maxval(unsigned key) {
 	return(get_minval(key) + range);
 }
 
+/*
+ * in principle this CLZ business could be done by the CPU's floating
+ * point unit: first, convert the value to a float and get the bits of
+ * the float in an integer so that we can pick them apart
+ *
+ *	float fpval = (float)value;
+ *	uint32_t fpbits = 0;
+ *	memcpy(&fpbits, &fpval, sizeof(fpbits));
+ *
+ * then shift the number so that we have the amount of mantissa we want;
+ * there is one sign bit (which is zero because the value is positive)
+ * and 8 bits of exponent
+ *
+ *	unsigned key = fpbits >> (32 - 1 - 8 - MANBITS);
+ *
+ * finally, adjust the exponent to change the ieee 754 bias to our bias
+ *
+ *	key -= (127 + MANBITS - 1) * MANSIZE;
+ *
+ * However this floating point hack has very weird rounding: the cast to
+ * float rounds to nearest, then the shift truncates. The code below
+ * only truncates, so it is more consistent. There doesn't seem to be a
+ * neat way to fix the rounding, so the integer bithacking is faster.
+ */
+
 static inline unsigned
 get_key(uint64_t value) {
 	if(value < MANSIZE) {
-		return(value); /* denormal */
+		return((unsigned)value); /* denormal */
 	} else {
-		unsigned clz = __builtin_clzll((unsigned long long)value);
-		unsigned exponent = PACKSIZE - MANBITS - clz;
-		unsigned mantissa = value >> (exponent - 1);
-		unsigned key = exponent * MANSIZE + mantissa % MANSIZE;
-		return(key);
+		int clz = __builtin_clzll((unsigned long long)value);
+		unsigned exponent = (unsigned)(PACKSIZE - MANBITS - clz);
+		unsigned mantissa = (unsigned)(value >> (exponent - 1));
+		return(exponent * MANSIZE + mantissa % MANSIZE);
 	}
 }
 
@@ -276,7 +300,7 @@ hg64_rank_of_value(hg64 *hg, uint64_t value) {
 
 uint64_t
 hg64_value_at_quantile(hg64 *hg, double q) {
-	double rank = (q < 0.0 ? 0.0 : q > 1.0 ? 1.0 : q) * hg->total;
+	double rank = (q < 0.0 ? 0.0 : q > 1.0 ? 1.0 : q) * (double)hg->total;
 	return(hg64_value_at_rank(hg, (uint64_t)rank));
 }
 
@@ -301,9 +325,9 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 		squares += total * (double)value;
 	}
 
-	double mean = sum / hg->total;
+	double mean = sum / (double)hg->total;
 	double square_of_mean = mean * mean;
-	double mean_of_squares = squares / hg->total;
+	double mean_of_squares = squares / (double)hg->total;
 	double variance = mean_of_squares - square_of_mean;
 	OUTARG(pmean, mean);
 	OUTARG(pvar, variance);
@@ -326,11 +350,11 @@ hg64_validate(hg64 *hg) {
 	for(uint64_t value = 0; value < max; value += step) {
 		validate_value(value);
 	}
-	min = 1ULL << 30, max = 1ULL << 40, step = 1ULL << 20;
+	min = 1ULL << 30; max = 1ULL << 40; step = 1ULL << 20;
 	for(uint64_t value = min; value < max; value += step) {
 		validate_value(value);
 	}
-	max = UINT64_MAX, min = max >> 8, step = max >> 10;
+	max = UINT64_MAX; min = max >> 8; step = max >> 10;
 	for(uint64_t value = max; value > min; value -= step) {
 		validate_value(value);
 	}
