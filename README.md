@@ -4,7 +4,7 @@ hg64 - a 64-bit histogram / quantile sketch
 `hg64` is a proof-of-concept implementation in C of a few ideas for
 collecting summary statistics of a data stream. My aim is to be able
 to record timing information in BIND, such as how long zone transfers
-take, or how long it takes to compact a qp-trie.
+take, or memory statistics such as how effective qp-trie compaction is.
 
 A `hg64` is a histogram of `uint64_t` values. Values are assigned to
 buckets by rounding them with less than 1% relative error, or about
@@ -15,7 +15,7 @@ designed around a target value error.)
 You can adjust the number of bits used in a `hg64` key by defining the
 `KEYBITS` preprocessor macro at compile time. Smaller keys require
 less memory, but are less accurate. The default is 12 bits; 10 bits is
-a reasonable alternative.
+a reasonable alternative, or 8 bits for low precision.
 
 
 space requirements
@@ -40,8 +40,8 @@ the histogram, and halves the maximum number of buckets.
 insertion performance
 ---------------------
 
-On my MacBook it takes about 4 ms to ingest a million data points
-(4 ns per item).
+On my MacBook it takes less than 4 ms to ingest a million data points
+(less than 4 ns per item).
 
 This includes the time it takes the data structure to warm up by
 allocating the memory needed to cover the range of values in the data
@@ -76,9 +76,10 @@ zeroes) and POPCNT (count set bits) compiler builtins.
 Floating point is not used when ingesting data. It is used when
 querying summary statistics about the data:
 
-  * When calculating ranks and quantiles, `hg64` uses floating point
-    multiplication and division to interpolate within the range of a
-    bucket.
+  * When calculating ranks, `hg64` uses floating point multiplication
+    and division to interpolate within the range of a bucket.
+
+  * Quantiles are floating-point numbers between 0 and 1.
 
   * The mean and variance are calculated in floating point, so that
     they are useful for histograms of small values.

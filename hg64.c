@@ -15,8 +15,6 @@
 
 #include "hg64.h"
 
-#define OUTARG(ptr, val) (((ptr) != NULL) && (bool)(*(ptr) = (val)))
-
 /*
  * This data structure is a sparse array of buckets. Keys are 12 bits by
  * default, but the size and accuracy can be reduced by changing
@@ -28,7 +26,7 @@
  * `pack` contains a packed sparse array of buckets indexed by the lower
  * `log2(PACKSIZE) == 6` bits of the key.
  *
- * A pack uses `popcount()` to avoid storing missing buckets. The `bmp`
+ * A pack uses `popcount()` to avoid storing empty buckets. The `bmp`
  * is a bitmap indicating which buckets are present. There is also a
  * `count` summing all the buckets in the pack so that we can work with
  * quantiles faster.
@@ -63,6 +61,8 @@ struct hg64 {
 };
 
 /**********************************************************************/
+
+#define OUTARG(ptr, val) (((ptr) != NULL) && (bool)(*(ptr) = (val)))
 
 static inline uint64_t
 interpolate(uint64_t span, uint64_t mul, uint64_t div) {
@@ -123,33 +123,24 @@ hg64_keybits(void) {
 
 /**********************************************************************/
 
-/*
- * In principle the CLZ business below could be done by the CPU's
- * floating point unit: first, convert the value to a float and get the
- * bits of the float in an integer so that we can pick them apart
- *
- *	float fpval = (float)value;
- *	uint32_t fpbits = 0;
- *	memcpy(&fpbits, &fpval, sizeof(fpbits));
- *
- * then shift the number so that we have the amount of mantissa we want;
- * (23 is the number of mantissa bits in an IEEE754 float)
- *
- *	unsigned key = fpbits >> (23 - MANBITS);
- *
- * finally, adjust the exponent to change the IEEE754 bias to our bias
- *
- *	key -= (127 + MANBITS - 1) * MANSIZE;
- *
- * However this floating point hack has very weird rounding: the cast to
- * float rounds to nearest, then the shift truncates. The code below
- * only truncates, so it is more consistent. There doesn't seem to be a
- * neat way to fix the rounding, and even if we ignore that problem, the
- * fp hack is neither simpler nor faster than pure integer bithacking.
- */
+static inline uint64_t
+get_minval(unsigned key) {
+	unsigned exponent = key / MANSIZE - 1;
+	uint64_t mantissa = key % MANSIZE + MANSIZE;
+	return(key < MANSIZE ? key : mantissa << exponent);
+}
+
+/* don't shift by 64; reduce shift by 2 and pre-shift UINT64_MAX */
+static inline uint64_t
+get_maxval(unsigned key) {
+	unsigned shift = PACKSIZE - key / MANSIZE - 1;
+	uint64_t range = UINT64_MAX/4 >> shift;
+	return(get_minval(key) + range);
+}
 
 static inline unsigned
 get_key(uint64_t value) {
+	/* hot path */
 	if(value < MANSIZE) {
 		return((unsigned)value); /* denormal */
 	} else {
@@ -160,25 +151,12 @@ get_key(uint64_t value) {
 	}
 }
 
-static inline uint64_t
-get_minval(unsigned key) {
-	unsigned exponent = key / MANSIZE - 1;
-	uint64_t mantissa = key % MANSIZE + MANSIZE;
-	return(key < MANSIZE ? key : mantissa << exponent);
-}
-
-static inline uint64_t
-get_maxval(unsigned key) {
-	unsigned shift = PACKSIZE - key / MANSIZE - 1;
-	uint64_t range = UINT64_MAX/4 >> shift;
-	return(get_minval(key) + range);
-}
-
 /*
  * Here we have fun indexing into a pack, and expanding if if necessary.
  */
 static inline uint64_t *
 get_bucket(hg64 *hg, unsigned key, bool nullable) {
+	/* hot path */
 	struct pack *pack = &hg->pack[key / PACKSIZE];
 	uint64_t bit = 1ULL << (key % PACKSIZE);
 	uint64_t mask = bit - 1;
@@ -187,6 +165,7 @@ get_bucket(hg64 *hg, unsigned key, bool nullable) {
 	if(bmp & bit) {
 		return(&pack->bucket[pos]);
 	}
+	/* cold path */
 	if(nullable) {
 		return(NULL);
 	}
@@ -204,6 +183,7 @@ get_bucket(hg64 *hg, unsigned key, bool nullable) {
 
 static inline void
 bump_count(hg64 *hg, unsigned key, uint64_t count) {
+	/* hot path */
 	hg->pack[key / PACKSIZE].count += count;
 	*get_bucket(hg, key, false) += count;
 }
@@ -222,13 +202,15 @@ get_pack_count(hg64 *hg, unsigned key) {
 /**********************************************************************/
 
 void
-hg64_inc(hg64 *hg, uint64_t value) {
-	hg64_add(hg, value, 1);
+hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
+	if(count > 0) {
+		bump_count(hg, get_key(value), count);
+	}
 }
 
 void
-hg64_add(hg64 *hg, uint64_t value, uint64_t count) {
-	bump_count(hg, get_key(value), count);
+hg64_inc(hg64 *hg, uint64_t value) {
+	hg64_add(hg, value, 1);
 }
 
 bool
@@ -247,7 +229,10 @@ hg64_get(hg64 *hg, unsigned key,
 void
 hg64_merge(hg64 *target, hg64 *source) {
 	for(unsigned key = 0; key < KEYS; key++) {
-		bump_count(target, key, get_key_count(source, key));
+		uint64_t count = get_key_count(source, key);
+		if(count > 0) {
+			bump_count(target, key, count);
+		}
 	}
 }
 
