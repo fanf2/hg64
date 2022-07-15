@@ -312,25 +312,27 @@ hg64_quantile_of_value(hg64 *hg, uint64_t value) {
 
 /**********************************************************************/
 
+/*
+ * https://fanf2.user.srcf.net/hermes/doc/antiforgery/stats.pdf
+ */
 void
 hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
-	/* XXX this is not numerically stable */
-	double sum = 0.0;
-	double squares = 0.0;
+	double pop = 0.0;
+	double mean = 0.0;
+	double sigma = 0.0;
 	for(unsigned key = 0; key < KEYS; key++) {
-		uint64_t value = (get_minval(key) + get_maxval(key)) / 2;
-		uint64_t count = get_count(hg, key);
-		double total = (double)value * (double)count;
-		sum += total;
-		squares += total * (double)value;
+		double min = (double)get_minval(key) / 2.0;
+		double max = (double)get_maxval(key) / 2.0;
+		double count = (double)get_count(hg, key);
+		double delta = (min + max - mean);
+		if(count != 0.0) {
+			pop += count;
+			mean += count * delta / pop;
+			sigma += count * delta * (min + max - mean);
+		}
 	}
-
-	double mean = sum / (double)hg->total;
-	double square_of_mean = mean * mean;
-	double mean_of_squares = squares / (double)hg->total;
-	double variance = mean_of_squares - square_of_mean;
 	OUTARG(pmean, mean);
-	OUTARG(pvar, variance);
+	OUTARG(pvar, sigma / pop);
 }
 
 /**********************************************************************/
