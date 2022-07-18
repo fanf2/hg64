@@ -38,19 +38,30 @@
  * significant bits in the value are discarded, which rounds the value
  * to its bucket's nominal value. Like IEEE 754, the most significant
  * bit is not included in the mantissa, except for very small values
- * (less than MANSIZE) which use a denormal format. Because of this, the
- * number of packs is a few less than a power of 2.
+ * (less than MANSIZE) which use a denormal format.
  */
 
 #ifndef KEYBITS
 #define KEYBITS 12
 #endif
 
-#define MANBITS (KEYBITS - 6)
+#define EXPBITS 6 /* log2(VALUEBITS) */
+#define MANBITS (KEYBITS - EXPBITS)
 #define MANSIZE (1 << MANBITS)
-#define PACKS (MANSIZE - MANBITS)
-#define PACKSIZE 64
-#define KEYS (PACKS * PACKSIZE)
+#define KEYSIZE (1 << KEYBITS)
+
+#define PACKSIZE 64 /* same as BMPBITS */
+#define PACKS (KEYSIZE / PACKSIZE)
+
+/*
+ * We waste a little extra space in the PACKS array that could be saved
+ * by omitting exponents that aren't needed by denormal numbers, but the
+ * arithmetic gets awkward for smaller KEYBITS. However we need the
+ * exact number of keys for accurate bounds checks.
+ */
+#define DENORMALS (MANBITS - 1)
+#define EXPONENTS (KEYSIZE / MANSIZE - DENORMALS)
+#define KEYS (EXPONENTS * MANSIZE)
 
 struct hg64 {
 	struct pack {
@@ -335,6 +346,8 @@ validate_value(uint64_t value) {
 		unsigned key = get_key(value);
 		uint64_t min = get_minval(key);
 		uint64_t max = get_maxval(key);
+		assert(key < KEYS);
+		assert(key / PACKSIZE < PACKS);
 		assert(value >= min);
 		assert(value <= max);
 }
@@ -345,11 +358,11 @@ hg64_validate(hg64 *hg) {
 	for(uint64_t value = 0; value < max; value += step) {
 		validate_value(value);
 	}
-	min = 1ULL << 30; max = 1ULL << 40; step = 1ULL << 20;
+	min = 1ULL << 30, max = 1ULL << 40, step = 1ULL << 20;
 	for(uint64_t value = min; value < max; value += step) {
 		validate_value(value);
 	}
-	max = UINT64_MAX; min = max >> 8; step = max >> 10;
+	max = UINT64_MAX, min = max >> 8, step = max >> 10;
 	for(uint64_t value = max; value > min; value -= step) {
 		validate_value(value);
 	}
