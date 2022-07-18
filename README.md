@@ -115,6 +115,29 @@ Origin 1.1][dco].
 [dco]: <https://developercertificate.org>
 
 
+future work
+-----------
+
+It might make sense to simplify the data structure: at the moment it
+is a configurable array of dynamically growable packed sub-arrays.
+Because the sub-arrays are growable it's hard to support concurrent
+access.
+
+Instead, we can make the sub-array size configurable, and each one is
+either completely present or absent. Multiple threads can then safely
+use atomic increments to record data without buckets being reallocated
+underneath them. When a sub-array needs to be created, any thread can
+allocate the array and CAS its pointer into place; if it loses a race
+to allocate, it can free its own allocation and record its data in the
+sub-array allocated by the winner.
+
+The top-level array can then be fixed size, determined by the range of
+exponents we need to support, i.e. 64 entries. The sub-arrays are
+indexed by the mantissa, whose size is configured according the the
+accuracy that is required. This layout needs less bit shuffling to
+calculate indexes.
+
+
 about the name
 --------------
 
