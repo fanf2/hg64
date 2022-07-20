@@ -45,15 +45,14 @@ summarize(FILE *fp, hg64 *hg) {
 	for(unsigned key = 0; hg64_get(hg, key, NULL, NULL, &count); key++) {
 		max = (max > count) ? max : count;
 	}
-	fprintf(fp, "%u keybits\n", hg64_keybits());
+	fprintf(fp, "%u sigbits\n", hg64_sigbits(hg));
 	fprintf(fp, "%zu bytes\n", hg64_size(hg));
 	fprintf(fp, "%zu buckets\n", hg64_buckets(hg));
 	fprintf(fp, "%zu largest\n", (size_t)max);
 	fprintf(fp, "%zu samples\n", (size_t)hg64_population(hg));
 	double mean, var;
 	hg64_mean_variance(hg, &mean, &var);
-	fprintf(fp, "%f mu\n", mean);
-	fprintf(fp, "%f sigma\n", sqrt(var));
+	fprintf(fp, "mean %f +/- %f\n", mean, sqrt(var));
 }
 
 static void
@@ -98,14 +97,10 @@ dump_csv(FILE *fp, hg64 *hg) {
 int main(void) {
 
 	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
-		if(i < 256) {
-			data[i] = i;
-		} else {
-			data[i] = rand_lemire(SAMPLE_COUNT);
-		}
+		data[i] = rand_lemire(SAMPLE_COUNT);
 	}
 
-	hg64 *hg = hg64_create();
+	hg64 *hg = hg64_create(6);
 	load_data(stderr, hg);
 	hg64_validate(hg);
 	summarize(stderr, hg);

@@ -10,14 +10,21 @@
 typedef struct hg64 hg64;
 
 /*
- * Allocate a new histogram
+ * Allocate a new histogram. `sigbits` must be between 1 and 6
+ * inclusive; it is the number of significant bits of each value
+ * to use when mapping values to buckets.
  */
-hg64 *hg64_create(void);
+hg64 *hg64_create(unsigned sigbits);
 
 /*
  * Free the memory used by a histogram
  */
 void hg64_destroy(hg64 *hg);
+
+/*
+ * Get the histogram's `sigbits` setting
+ */
+unsigned hg64_sigbits(hg64 *hg);
 
 /*
  * Calculate the total count of all the buckets in the histogram
@@ -33,11 +40,6 @@ size_t hg64_buckets(hg64 *hg);
  * Calculate the memory used in bytes
  */
 size_t hg64_size(hg64 *hg);
-
-/*
- * Get the compile-time KEYBITS setting
- */
-unsigned hg64_keybits(void);
 
 /*
  * Add 1 to the value's bucket
@@ -103,3 +105,10 @@ uint64_t hg64_rank_of_value(hg64 *hg, uint64_t value);
  * Get the approximate quantile of a value in the recorded data.
  */
 double hg64_quantile_of_value(hg64 *hg, uint64_t value);
+
+/*
+ * Serialize the histogram into `buffer`, which has `size` bytes
+ * available. Returns the number of bytes required; if the return
+ * value is greater than `size` the output has been truncated.
+ */
+size_t hg64_export(hg64 *hg, uint8_t *buffer, size_t size);
