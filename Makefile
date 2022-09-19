@@ -1,13 +1,19 @@
 # Written by Tony Finch <dot@dotat.at> <fanf@isc.org>
-# You may do anything with this. It has no warranty.
-# <https://creativecommons.org/publicdomain/zero/1.0/>
-# SPDX-License-Identifier: CC0-1.0
+#
+# Permission is hereby granted to use, copy, modify, and/or
+# distribute this software for any purpose with or without fee.
+#
+# This software is provided 'as is', without warranty of any kind.
+# In no event shall the authors be liable for any damages arising
+# from the use of this software.
+#
+# SPDX-License-Identifier: 0BSD OR MIT-0
 
 KEYBITS = 12
 
 #llvm	= /opt/homebrew/opt/llvm
 #CC	= $(llvm)/bin/clang
-#CFLAGS	= -g -O3 -std=c18 -Wall -Wextra -Werror -DKEYBITS=$(KEYBITS)
+#CFLAGS	= -g -O3 -std=c18 -Wall -Wextra -DKEYBITS=$(KEYBITS) #-fsanitize=undefined,address
 #LDFLAGS = -g -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib -fsanitize=undefined,address
 
 all: test
