@@ -27,7 +27,7 @@ struct hg64 {
 };
 
 /*
- * We waste a little extra space in the PACKS array that could be saved
+ * We waste a little extra space in the BINS array that could be saved
  * by omitting exponents that aren't needed by denormal numbers. However
  * we need the exact number of keys for accurate bounds checks.
  */
@@ -121,18 +121,23 @@ get_maxval(hg64 *hg, unsigned key) {
 	return(get_minval(hg, key) + range);
 }
 
+/*
+ * This branchless conversion is due to Paul Khuong: see bin_down_of() in
+ * http://pvk.ca/Blog/2015/06/27/linear-log-bucketing-fast-versatile-simple/
+ */
 static inline unsigned
 get_key(hg64 *hg, uint64_t value) {
 	/* hot path */
 	unsigned sigtop = 1 << hg->sigbits;
-	if(value < sigtop) {
-		return(value); /* denormal */
-	} else {
-		int clz = __builtin_clzll((unsigned long long)value);
-		unsigned exponent = 64 - hg->sigbits - clz;
-		unsigned mantissa = value >> (exponent - 1);
-		return(exponent * sigtop | mantissa % sigtop);
-	}
+	/* ensure that denormal numbers are all in the same bin */
+	uint64_t binned = value | sigtop;
+	int clz = __builtin_clzll((unsigned long long)(binned));
+	/* actually 1 less than the exponent except for denormals */
+	unsigned exponent = 63 - hg->sigbits - clz;
+	/* mantissa has leading bit set except for denormals */
+	unsigned mantissa = value >> exponent;
+	/* leading bit of mantissa adds one to exponent */
+	return((exponent << hg->sigbits) + mantissa);
 }
 
 static inline struct bin *
@@ -140,9 +145,6 @@ get_bin(hg64 *hg, unsigned key) {
 	return(&hg->bin[key >> hg->sigbits]);
 }
 
-/*
- * Here we have fun indexing into a pack, and expanding if if necessary.
- */
 static inline uint64_t *
 get_counter(hg64 *hg, unsigned key, bool nullable) {
 	/* hot path */
