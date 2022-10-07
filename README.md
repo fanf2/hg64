@@ -22,6 +22,20 @@ less memory, but are less accurate. The default is 12 bits; 10 bits is
 a reasonable alternative, or 8 bits for low precision.
 
 
+caveat
+------
+
+This README describes the code in the `trunk` of this repository,
+which corresponds to [my blog post about `hg64`][blog].
+
+Since then I have made a simplified version in the `without-popcount`
+branch. It uses more memory (it does not tightly pack the histogram
+buckets) but it is more easily adapted to lock-free multithreading,
+which will be needed in BIND.
+
+[blog]: https://dotat.at/@/2022-07-15-histogram.html
+
+
 space requirements
 ------------------
 
@@ -100,44 +114,6 @@ repositories
   * https://github.com/fanf2/hg64
 
 
-contributing
-------------
-
-Please send bug reports, suggestions, and patches by email to me, Tony
-Finch <<dot@dotat.at>>, or via GitHub. Any contribution that you want
-included in this code must be licensed under the [CC0 1.0 Public
-Domain Dedication][CC0], and must include a `Signed-off-by:` line to
-certify that you wrote it or otherwise have the right to pass it on as
-a open-source patch, according to the [Developer's Certificate of
-Origin 1.1][dco].
-
-[cc0]: <https://creativecommons.org/publicdomain/zero/1.0/>
-[dco]: <https://developercertificate.org>
-
-
-future work
------------
-
-It might make sense to simplify the data structure: at the moment it
-is a configurable array of dynamically growable packed sub-arrays.
-Because the sub-arrays are growable it's hard to support concurrent
-access.
-
-Instead, we can make the sub-array size configurable, and each one is
-either completely present or absent. Multiple threads can then safely
-use atomic increments to record data without buckets being reallocated
-underneath them. When a sub-array needs to be created, any thread can
-allocate the array and CAS its pointer into place; if it loses a race
-to allocate, it can free its own allocation and record its data in the
-sub-array allocated by the winner.
-
-The top-level array can then be fixed size, determined by the range of
-exponents we need to support, i.e. 64 entries. The sub-arrays are
-indexed by the mantissa, whose size is configured according the the
-accuracy that is required. This layout needs less bit shuffling to
-calculate indexes.
-
-
 about the name
 --------------
 
@@ -156,6 +132,19 @@ There are several ways that `hg64` uses the number 64:
   * 58 is actually two 64s in disguise: it comes from `64 - log2(64)`
 
 Altering `KEYBITS` changes the number of bits in the mantissa.
+
+
+contributing
+------------
+
+Please send bug reports, suggestions, and patches by email to me, Tony
+Finch <<dot@dotat.at>>, or via GitHub. Any contribution that you want
+included in this code must be unrestricted (like the licence below),
+and must include a `Signed-off-by:` line to certify that you wrote it
+or otherwise have the right to pass it on as a open-source patch,
+according to the [Developer's Certificate of Origin 1.1][dco].
+
+[dco]: <https://developercertificate.org>
 
 
 licence
