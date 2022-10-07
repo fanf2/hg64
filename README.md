@@ -37,9 +37,6 @@ hours, there is a factor of about a million (`2^20`) between the
 smallest and the largest times. This range can be covered by about
 `20 * 64 = 1280` buckets, or about 11 KiB.
 
-If you reduce the key size by one bit, it halves the minimum size of
-the histogram, and halves the maximum number of buckets.
-
 
 insertion performance
 ---------------------
@@ -51,10 +48,17 @@ This includes the time it takes the data structure to warm up by
 allocating the memory needed to cover the range of values in the data
 stream.
 
-This is single-threaded performance; the code does not support
-concurrent insertion by multiple threads. In a multithreaded
-application, it's best to have a histogram per thread or per CPU,
-and merge them when you need to get system-wide counts.
+This is single-threaded performance; the code does not yet support
+concurrent insertion by multiple threads. This `without-popcount`
+version is designed to be relatively easy to adapt for lock-free
+multithreaded use, though I have not yet done all the necessary work.
+
+
+repositories
+------------
+
+  * https://dotat.at/cgi/git/hg64.git
+  * https://github.com/fanf2/hg64
 
 
 building
@@ -74,8 +78,8 @@ There are not many requirements beyond standard C:
 CPU features
 ------------
 
-To find a bucket in its sparse array, `hg64` uses CLZ (count leading
-zeroes) and POPCNT (count set bits) compiler builtins.
+To find a bucket in its sparse array, `hg64` uses the CLZ (count
+leading zeroes) compiler builtin.
 
 Floating point is not used when ingesting data. It is used when
 querying summary statistics about the data:
@@ -93,69 +97,17 @@ querying summary statistics about the data:
     you need to.
 
 
-repositories
-------------
-
-  * https://dotat.at/cgi/git/hg64.git
-  * https://github.com/fanf2/hg64
-
-
 contributing
 ------------
 
 Please send bug reports, suggestions, and patches by email to me, Tony
 Finch <<dot@dotat.at>>, or via GitHub. Any contribution that you want
-included in this code must be licensed under the [CC0 1.0 Public
-Domain Dedication][CC0], and must include a `Signed-off-by:` line to
-certify that you wrote it or otherwise have the right to pass it on as
-a open-source patch, according to the [Developer's Certificate of
-Origin 1.1][dco].
+included in this code must be unrestricted (like the licence below),
+and must include a `Signed-off-by:` line to certify that you wrote it
+or otherwise have the right to pass it on as a open-source patch,
+according to the [Developer's Certificate of Origin 1.1][dco].
 
-[cc0]: <https://creativecommons.org/publicdomain/zero/1.0/>
 [dco]: <https://developercertificate.org>
-
-
-future work
------------
-
-It might make sense to simplify the data structure: at the moment it
-is a configurable array of dynamically growable packed sub-arrays.
-Because the sub-arrays are growable it's hard to support concurrent
-access.
-
-Instead, we can make the sub-array size configurable, and each one is
-either completely present or absent. Multiple threads can then safely
-use atomic increments to record data without buckets being reallocated
-underneath them. When a sub-array needs to be created, any thread can
-allocate the array and CAS its pointer into place; if it loses a race
-to allocate, it can free its own allocation and record its data in the
-sub-array allocated by the winner.
-
-The top-level array can then be fixed size, determined by the range of
-exponents we need to support, i.e. 64 entries. The sub-arrays are
-indexed by the mantissa, whose size is configured according the the
-accuracy that is required. This layout needs less bit shuffling to
-calculate indexes.
-
-
-about the name
---------------
-
-There are several ways that `hg64` uses the number 64:
-
-  * Obviously, data values are 64 bits
-
-  * The internal number representation has an exponent with 58 values
-    and a mantissa with 64 values
-
-  * The data structure is an array of 58 elements, each of which is a
-    packed array of up to 64 buckets
-
-  * Each packed array has a 64-wide occupancy bitmap
-
-  * 58 is actually two 64s in disguise: it comes from `64 - log2(64)`
-
-Altering `KEYBITS` changes the number of bits in the mantissa.
 
 
 licence
