@@ -64,7 +64,7 @@ void hg64_add(hg64 *hg, uint64_t value, uint64_t count);
  *
  * If `pmin` is non-NULL it is set to the bucket's minimum inclusive value.
  *
- * If `pmax` is non-NULL it is set to the bucket's maximum exclusive value.
+ * If `pmax` is non-NULL it is set to the bucket's maximum inclusive value.
  *
  * If `pcount` is non-NULL it is set to the bucket's counter, which
  * can be zero. (Empty buckets are included in the iterator.)
