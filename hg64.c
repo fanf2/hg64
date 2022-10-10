@@ -369,7 +369,8 @@ hg64_validate(hg64 *hg) {
 		for(unsigned c = 0; c < BINSIZE(hg); c++) {
 			total += bin->count[c];
 		}
-		assert(total == bin->total);
+		assert(bin->total != 0);
+		assert(bin->total == total);
 	}
 }
 
