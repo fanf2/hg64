@@ -310,16 +310,13 @@ hg64_quantile_of_value(hg64 *hg, uint64_t value) {
  */
 void
 hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
-	unsigned keys = KEYS(hg);
 	double pop = 0.0;
 	double mean = 0.0;
 	double sigma = 0.0;
-	for(unsigned key = 0; key < keys; key++) {
-		double min = (double)get_minval(hg, key) / 2.0;
-		double max = (double)get_maxval(hg, key) / 2.0;
-		double count = (double)get_key_count(hg, key);
-		double delta = (min + max - mean);
-		if(count != 0.0) {
+	uint64_t min, max, count;
+	for(unsigned key = 0; hg64_get(hg, key, &min, &max, &count); key++) {
+		double delta = (double)min / 2.0 + (double)max / 2.0 - mean;
+		if(count != 0) {
 			pop += count;
 			mean += count * delta / pop;
 			sigma += count * delta * (min + max - mean);
