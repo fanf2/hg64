@@ -261,11 +261,6 @@ hg64_get(hg64 *hg, unsigned key,
 	}
 }
 
-void
-hg64_merge(hg64 *target, hg64 *source) {
-	/* TODO */
-}
-
 /*
  * https://fanf2.user.srcf.net/hermes/doc/antiforgery/stats.pdf
  */
