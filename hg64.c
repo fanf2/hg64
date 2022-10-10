@@ -406,12 +406,15 @@ hg64_validate(hg64 *hg) {
 	}
 
 	for(unsigned b = 0; b < BINS; b++) {
-		uint64_t total = 0;
-		if(read_ctr_ptr(hg, b) != NULL) {
-			for(unsigned c = 0; c < BINSIZE(hg); c++) {
-				total += get_key_count(hg, BINSIZE(hg) * b + c);
-			}
+		if(read_ctr_ptr(hg, b) == NULL) {
+			assert(get_bin_total(hg, BINSIZE(hg) * b) == 0);
+			continue;
 		}
+		uint64_t total = 0;
+		for(unsigned c = 0; c < BINSIZE(hg); c++) {
+			total += get_key_count(hg, BINSIZE(hg) * b + c);
+		}
+		assert(total != 0);
 		assert(get_bin_total(hg, BINSIZE(hg) * b) == total);
 	}
 }
