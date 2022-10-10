@@ -52,24 +52,25 @@ static void
 summarize(FILE *fp, hg64 *hg) {
 	uint64_t count = 0;
 	uint64_t max = 0;
+	uint64_t population = 0;
 	for(unsigned key = 0; hg64_get(hg, key, NULL, NULL, &count); key++) {
 		max = (max > count) ? max : count;
+		population += count;
 	}
 	fprintf(fp, "%u sigbits\n", hg64_sigbits(hg));
 	fprintf(fp, "%zu bytes\n", hg64_size(hg));
-	fprintf(fp, "%zu buckets\n", hg64_buckets(hg));
 	fprintf(fp, "%zu largest\n", (size_t)max);
-	fprintf(fp, "%zu samples\n", (size_t)hg64_population(hg));
+	fprintf(fp, "%zu samples\n", (size_t)population);
 	double mean, var;
 	hg64_mean_variance(hg, &mean, &var);
 	fprintf(fp, "mean %f +/- %f\n", mean, sqrt(var));
 }
 
 static void
-data_vs_hg64(FILE *fp, hg64 *hg, double q) {
+data_vs_hg64(FILE *fp, hg64s *hs, double q) {
 	size_t rank = (size_t)(q * SAMPLE_COUNT);
-	uint64_t value = hg64_value_at_quantile(hg, q);
-	double p = hg64_quantile_of_value(hg, data[rank]);
+	uint64_t value = hg64s_value_at_quantile(hs, q);
+	double p = hg64s_quantile_of_value(hs, data[rank]);
 	double div = data[rank] == 0 ? 1 : (double)data[rank];
 	fprintf(fp,
 		"data  %5.1f%% %8llu  "
@@ -115,20 +116,21 @@ int main(void) {
 	hg64_validate(hg);
 	summarize(stderr, hg);
 
+	hg64s *hs = hg64_snapshot(hg);
 	qsort(data, sizeof(data)/sizeof(*data), sizeof(*data), compare);
 
 	double q = 0.0;
 	for(double expo = -1; expo > -4; expo--) {
 		double step = pow(10, expo);
 		for(size_t n = 0; n < 9; n++) {
-			data_vs_hg64(stderr, hg, q);
+			data_vs_hg64(stderr, hs, q);
 			q += step;
 		}
 	}
-	data_vs_hg64(stderr, hg, 0.999);
-	data_vs_hg64(stderr, hg, 0.9999);
-	data_vs_hg64(stderr, hg, 0.99999);
-	data_vs_hg64(stderr, hg, 0.999999);
+	data_vs_hg64(stderr, hs, 0.999);
+	data_vs_hg64(stderr, hs, 0.9999);
+	data_vs_hg64(stderr, hs, 0.99999);
+	data_vs_hg64(stderr, hs, 0.999999);
 
 	//dump_csv(stdout, hg);
 }

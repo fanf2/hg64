@@ -14,6 +14,7 @@
  */
 
 typedef struct hg64 hg64;
+typedef struct hg64s hg64s;
 
 /*
  * Allocate a new histogram. `sigbits` must be between 1 and 6
@@ -33,16 +34,6 @@ void hg64_destroy(hg64 *hg);
 unsigned hg64_sigbits(hg64 *hg);
 
 /*
- * Calculate the total count of all the buckets in the histogram
- */
-uint64_t hg64_population(hg64 *hg);
-
-/*
- * Calculate the number of buckets
- */
-size_t hg64_buckets(hg64 *hg);
-
-/*
  * Calculate the memory used in bytes
  */
 size_t hg64_size(hg64 *hg);
@@ -53,14 +44,15 @@ size_t hg64_size(hg64 *hg);
 void hg64_inc(hg64 *hg, uint64_t value);
 
 /*
- * Add an arbitrary count to the value's bucket
+ * Add an arbitrary increment to the value's bucket
  */
-void hg64_add(hg64 *hg, uint64_t value, uint64_t count);
+void hg64_add(hg64 *hg, uint64_t value, uint64_t inc);
 
 /*
  * Get information about a bucket. This can be used as an iterator, by
  * initializing `key` to zero and incrementing by one until `hg64_get()`
- * returns `false`.
+ * returns `false`. The number of iterations is a little less than
+ * `1 << (6 + sigbits)`.
  *
  * If `pmin` is non-NULL it is set to the bucket's minimum inclusive value.
  *
@@ -88,10 +80,15 @@ void hg64_merge(hg64 *target, hg64 *source);
 void hg64_mean_variance(hg64 *hg, double *pmean, double *pvar);
 
 /*
+ * Get a snapshot of a histogram for rank and quantile calculations
+ */
+hg64s *hg64_snapshot(hg64 *hg);
+
+/*
  * Get the approximate value at a given rank in the recorded data.
  * The rank must be less than the histogram's population.
  */
-uint64_t hg64_value_at_rank(hg64 *hg, uint64_t rank);
+uint64_t hg64s_value_at_rank(const hg64s *hs, uint64_t rank);
 
 /*
  * Get the approximate value at a given quantile in the recorded data.
@@ -99,18 +96,18 @@ uint64_t hg64_value_at_rank(hg64 *hg, uint64_t rank);
  *
  * Quantiles are percentiles divided by 100. The median is quantile 1/2.
  */
-uint64_t hg64_value_at_quantile(hg64 *hg, double quantile);
+uint64_t hg64s_value_at_quantile(const hg64s *hs, double quantile);
 
 /*
  * Get the approximate rank of a value in the recorded data.
  * You can query the rank of any value.
  */
-uint64_t hg64_rank_of_value(hg64 *hg, uint64_t value);
+uint64_t hg64s_rank_of_value(const hg64s *hs, uint64_t value);
 
 /*
  * Get the approximate quantile of a value in the recorded data.
  */
-double hg64_quantile_of_value(hg64 *hg, uint64_t value);
+double hg64s_quantile_of_value(const hg64s *hs, uint64_t value);
 
 /*
  * Serialize the histogram into `buffer`, which has `size` bytes
