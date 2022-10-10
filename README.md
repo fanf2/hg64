@@ -21,8 +21,24 @@ You can adjust the number of bits used in a `hg64` key by defining the
 less memory, but are less accurate. The default is 12 bits; 10 bits is
 a reasonable alternative, or 8 bits for low precision.
 
+multithreading
+--------------
+
 This version of the code uses C11 atomics to support concurrent
 updates by multiple threads.
+
+There is a different API for rank and quantile calculations: you have
+to take a snapshot of the histogram first. These calculations iterate
+over the histogram, using summary totals so they don't have to look at
+every bucket. If the histogram is updated concurrently, races can make
+a nonsense of these calculations because we can't update both the
+bucket counter and the summary total in one atomic operation.
+
+Taking a snapshot also reduces the performance regression compared to
+the single-threaded `without-popcount` branch: the `hg64_add()` and
+`hg64_inc()` functions no longer need to maintain the summary totals:
+they just increment one counter. The summary totals are calculated
+when you take a snapshot.
 
 repositories
 ------------

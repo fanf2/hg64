@@ -75,7 +75,8 @@ bool hg64_get(hg64 *hg, unsigned key,
 void hg64_mean_variance(hg64 *hg, double *pmean, double *pvar);
 
 /*
- * Get a snapshot of a histogram for rank and quantile calculations
+ * Get a snapshot of a histogram for rank and quantile calculations.
+ * When you have finished with it, just free() it.
  */
 hg64s *hg64_snapshot(hg64 *hg);
 
