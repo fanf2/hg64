@@ -22,6 +22,10 @@
 #include "hg64.h"
 #include "random.h"
 
+#ifndef KEYBITS
+#define KEYBITS 12
+#endif
+
 extern void hg64_validate(hg64 *hg);
 
 #define NANOSECS (1000*1000*1000)

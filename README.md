@@ -21,38 +21,8 @@ You can adjust the number of bits used in a `hg64` key by defining the
 less memory, but are less accurate. The default is 12 bits; 10 bits is
 a reasonable alternative, or 8 bits for low precision.
 
-
-space requirements
-------------------
-
-With the default 12 bit keys, the minimum size of the histogram is 1.3
-KiB, and each non-empty bucket uses an additional 8 bytes. There can
-be up to 3712 buckets, so the maximum size of the histogram is 30.3
-KiB.
-
-It's normal to have a few hundred buckets.
-
-When recording timings that can vary from a few milliseconds to a few
-hours, there is a factor of about a million (`2^20`) between the
-smallest and the largest times. This range can be covered by about
-`20 * 64 = 1280` buckets, or about 11 KiB.
-
-
-insertion performance
----------------------
-
-A microbenchmark on my MacBook takes 4 or 5 ms to ingest a million
-data points (4 or 5 ns per item).
-
-This includes the time it takes the data structure to warm up by
-allocating the memory needed to cover the range of values in the data
-stream.
-
-This is single-threaded performance; the code does not yet support
-concurrent insertion by multiple threads. This `without-popcount`
-version is designed to be relatively easy to adapt for lock-free
-multithreaded use, though I have not yet done all the necessary work.
-
+This version of the code uses C11 atomics to support concurrent
+updates by multiple threads.
 
 repositories
 ------------
@@ -80,6 +50,11 @@ CPU features
 
 To find a bucket in its sparse array, `hg64` uses the CLZ (count
 leading zeroes) compiler builtin.
+
+C11 atomics are used to support multithreaded updates. Atomic
+compare-and-swap is used when extending the histogram with a newly
+allocated bin of counters. Counters are incremented atomically with
+relaxed memory ordering to avoid unnecessary synchronization.
 
 Floating point is not used when ingesting data. It is used when
 querying summary statistics about the data:
