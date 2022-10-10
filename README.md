@@ -30,8 +30,10 @@ which corresponds to [my blog post about `hg64`][blog].
 
 Since then I have made a simplified version in the `without-popcount`
 branch. It uses more memory (it does not tightly pack the histogram
-buckets) but it is more easily adapted to lock-free multithreading,
-which will be needed in BIND.
+buckets) but it is a stepping-stone to lock-free multithreading.
+
+The `multithreaded` branch is a prototype of a lock-free concurrent
+histogram, much closer to something that would be suitable for BIND.
 
 [blog]: https://dotat.at/@/2022-07-15-histogram.html
 
@@ -69,6 +71,10 @@ This is single-threaded performance; the code does not support
 concurrent insertion by multiple threads. In a multithreaded
 application, it's best to have a histogram per thread or per CPU,
 and merge them when you need to get system-wide counts.
+
+(The more recent code in the `without-popcount` and `multithreaded`
+branches both take less than 2.5 ms, nearly twice as fast, still with
+only one thread - I have not yet tested multithreded performance.)
 
 
 building
