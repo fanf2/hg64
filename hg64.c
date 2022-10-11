@@ -110,7 +110,7 @@ interpolate(uint64_t span, uint64_t mul, uint64_t div) {
 
 hg64 *
 hg64_create(unsigned sigbits) {
-	if(sigbits < 1 || 6 < sigbits) {
+	if(sigbits < 1 || 15 < sigbits) {
 		return(NULL);
 	}
 	hg64 *hg = malloc(sizeof(*hg));
