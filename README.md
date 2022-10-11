@@ -21,24 +21,36 @@ You can adjust the number of bits used in a `hg64` key by defining the
 less memory, but are less accurate. The default is 12 bits; 10 bits is
 a reasonable alternative, or 8 bits for low precision.
 
+
 multithreading
 --------------
 
 This version of the code uses C11 atomics to support concurrent
 updates by multiple threads.
 
-There is a different API for rank and quantile calculations: you have
-to take a snapshot of the histogram first. These calculations iterate
-over the histogram, using summary totals so they don't have to look at
-every bucket. If the histogram is updated concurrently, races can make
-a nonsense of these calculations because we can't update both the
-bucket counter and the summary total in one atomic operation.
+Compared to previous versions, there is a different API for rank and
+quantile calculations: you have to take a snapshot of the histogram
+first. These calculations iterate over the histogram, using summary
+totals so they don't have to look at every bucket. If the histogram is
+updated concurrently, races can make a nonsense of these calculations
+because we can't update both the bucket counter and the summary total
+in one atomic operation.
 
 Taking a snapshot also reduces the performance regression compared to
 the single-threaded `without-popcount` branch: the `hg64_add()` and
 `hg64_inc()` functions no longer need to maintain the summary totals:
 they just increment one counter. The summary totals are calculated
 when you take a snapshot.
+
+The test program hammers the histogram from a varying number of
+threads. Although it prints some time measurements, it is not a
+realistic test: in real programs I expect histograms to be updated
+relatively rarely, so in the typical case the histogram is not in a
+fast cache and increments are not contended. However, in the test
+program the histogram is in cache and highly contended. This means
+that its single-threaded times are too optimistic, and for
+multithreaded code they can be too pessimistic.
+
 
 repositories
 ------------
