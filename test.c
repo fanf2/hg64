@@ -12,7 +12,9 @@
  */
 
 #include <assert.h>
+#include <err.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -22,11 +24,25 @@
 #include "hg64.h"
 #include "random.h"
 
+extern void hg64_validate(void);
+
 #ifndef KEYBITS
-#define KEYBITS 12
+#define KEYBITS 18
 #endif
 
-extern void hg64_validate(hg64 *hg);
+#ifndef THREADS
+#define THREADS 9
+#endif
+
+#ifndef SAMPLES
+#define SAMPLES (1000*1000)
+#endif
+
+#ifndef RANGE
+#define RANGE (1000*1000*1000)
+#endif
+
+static uint64_t data[THREADS][SAMPLES];
 
 #define NANOSECS (1000*1000*1000)
 
@@ -37,9 +53,6 @@ nanotime(void) {
 	return((uint64_t)tv.tv_sec * NANOSECS + (uint64_t)tv.tv_nsec);
 }
 
-#define SAMPLE_COUNT (1000*1000)
-
-static uint64_t data[SAMPLE_COUNT];
 
 static int
 compare(const void *ap, const void *bp) {
@@ -49,7 +62,7 @@ compare(const void *ap, const void *bp) {
 }
 
 static void
-summarize(FILE *fp, hg64 *hg) {
+summarize(hg64 *hg) {
 	uint64_t count = 0;
 	uint64_t max = 0;
 	uint64_t population = 0;
@@ -57,80 +70,124 @@ summarize(FILE *fp, hg64 *hg) {
 		max = (max > count) ? max : count;
 		population += count;
 	}
-	fprintf(fp, "%u sigbits\n", hg64_sigbits(hg));
-	fprintf(fp, "%zu bytes\n", hg64_size(hg));
-	fprintf(fp, "%zu largest\n", (size_t)max);
-	fprintf(fp, "%zu samples\n", (size_t)population);
+	printf("%u sigbits\n", hg64_sigbits(hg));
+	printf("%zu bytes\n", hg64_size(hg));
+	printf("%zu largest\n", (size_t)max);
+	printf("%zu samples\n", (size_t)population);
 	double mean, var;
 	hg64_mean_variance(hg, &mean, &var);
-	fprintf(fp, "mean %f +/- %f\n", mean, sqrt(var));
+	printf("mean %f +/- %f\n", mean, sqrt(var));
 }
 
 static void
-data_vs_hg64(FILE *fp, hg64s *hs, double q) {
-	size_t rank = (size_t)(q * SAMPLE_COUNT);
+data_vs_hg64(hg64s *hs, double q) {
+	size_t rank = (size_t)(q * THREADS * SAMPLES);
+	size_t t = rank % THREADS;
+	size_t i = rank / THREADS;
 	uint64_t value = hg64s_value_at_quantile(hs, q);
-	double p = hg64s_quantile_of_value(hs, data[rank]);
-	double div = data[rank] == 0 ? 1 : (double)data[rank];
-	fprintf(fp,
-		"data  %5.1f%% %8llu  "
-		"hg64 %5.1f%% %8llu  "
-		"error value %+f rank %+f\n",
-		q * 100, data[rank],
-		p * 100, value,
-		((double)data[rank] - (double)value) / div,
-		(q - p) / (q == 0.0 ? 1.0 : q));
+	double p = hg64s_quantile_of_value(hs, data[t][i]);
+	double div = data[t][i] == 0 ? 1 : (double)data[t][i];
+	printf("data  %5.1f%% %8llu  "
+	       "hg64 %5.1f%% %8llu  "
+	       "error value %+f rank %+f\n",
+	       q * 100, data[t][i],
+	       p * 100, value,
+	       ((double)data[t][i] - (double)value) / div,
+	       (q - p) / (q == 0.0 ? 1.0 : q));
 }
 
-static void
-load_data(FILE *fp, hg64 *hg) {
+struct thread {
+	hg64 *hg;
+	uint64_t ns;
+	uint64_t *data;
+	pthread_t tid;
+};
+
+static void *
+load_data(void *varg) {
+	struct thread *arg = varg;
 	uint64_t t0 = nanotime();
-	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
-		hg64_add(hg, data[i], 1);
+	for(size_t i = 0; i < SAMPLES; i++) {
+		hg64_add(arg->hg, arg->data[i], 1);
 	}
 	uint64_t t1 = nanotime();
-	double nanosecs = (double)(t1 - t0);
-	fprintf(fp, "%f load time %.2f ns per item\n",
-		nanosecs / NANOSECS, nanosecs / SAMPLE_COUNT);
+	arg->ns = t1 - t0;
+	return(NULL);
 }
 
 static void
-dump_csv(FILE *fp, hg64 *hg) {
+parallel_load(hg64 *hg, unsigned threads) {
+	struct thread thread[THREADS];
+	for(unsigned t = 0; t < threads; t++) {
+		struct thread *tt = &thread[t];
+		*tt = (struct thread){
+			.hg = hg,
+			.data = data[t],
+		};
+		assert(pthread_create(&tt->tid, NULL, load_data, tt) == 0);
+	}
+	double total = 0;
+	for(unsigned t = 0; t < threads; t++) {
+		assert(pthread_join(thread[t].tid, NULL) == 0);
+		double ns = thread[t].ns;
+		printf("%u load time %f secs %.2f ns per item\n",
+		       t, ns / NANOSECS, ns / SAMPLES);
+		total += ns;
+	}
+	total /= threads;
+	printf("* load time %f secs %.2f ns per item\n",
+	       total / NANOSECS, total / SAMPLES);
+	summarize(hg);
+}
+
+static void
+dump_csv(hg64 *hg) {
 	uint64_t value, count;
-	fprintf(fp, "value,count\n");
+	printf("value,count\n");
 	for(unsigned key = 0; hg64_get(hg, key, &value, NULL, &count); key++) {
 		if(count != 0) {
-			fprintf(fp, "%llu,%llu\n", value, count);
+			printf("%llu,%llu\n", value, count);
 		}
 	}
 }
 
 int main(void) {
 
-	for(size_t i = 0; i < SAMPLE_COUNT; i++) {
-		data[i] = rand_lemire(SAMPLE_COUNT);
+	hg64_validate();
+
+	for(unsigned t = 0; t < THREADS; t++) {
+		for(unsigned i = 0; i < SAMPLES; i++) {
+			data[t][i] = rand_lemire(RANGE);
+		}
 	}
 
-	hg64 *hg = hg64_create(KEYBITS - 6);
-	load_data(stderr, hg);
-	hg64_validate(hg);
-	summarize(stderr, hg);
+	hg64 *hg = NULL;
+	for(unsigned t = 0; t < THREADS; t++) {
+		if(hg != NULL) {
+			hg64_destroy(hg);
+		}
+		hg = hg64_create(KEYBITS - 6);
+		parallel_load(hg, t);
+	}
+
+	for(unsigned t = 0; t < THREADS; t++) {
+		qsort(data[t], SAMPLES, sizeof(uint64_t), compare);
+	}
 
 	hg64s *hs = hg64_snapshot(hg);
-	qsort(data, sizeof(data)/sizeof(*data), sizeof(*data), compare);
 
 	double q = 0.0;
 	for(double expo = -1; expo > -4; expo--) {
 		double step = pow(10, expo);
 		for(size_t n = 0; n < 9; n++) {
-			data_vs_hg64(stderr, hs, q);
+			data_vs_hg64(hs, q);
 			q += step;
 		}
 	}
-	data_vs_hg64(stderr, hs, 0.999);
-	data_vs_hg64(stderr, hs, 0.9999);
-	data_vs_hg64(stderr, hs, 0.99999);
-	data_vs_hg64(stderr, hs, 0.999999);
+	data_vs_hg64(hs, 0.999);
+	data_vs_hg64(hs, 0.9999);
+	data_vs_hg64(hs, 0.99999);
+	data_vs_hg64(hs, 0.999999);
 
 	//dump_csv(stdout, hg);
 }
