@@ -124,6 +124,42 @@ parallel_load(hg64 *hg, unsigned threads) {
 }
 
 static void
+merged_load(hg64 *hg, unsigned threads) {
+	struct thread thread[THREADS];
+	hg64 *thg[THREADS];
+	for(unsigned t = 0; t < threads; t++) {
+		struct thread *tt = &thread[t];
+		thg[t] = hg64_create(hg64_sigbits(hg));
+		*tt = (struct thread){
+			.hg = thg[t],
+			.data = data[t],
+		};
+		assert(pthread_create(&tt->tid, NULL, load_data, tt) == 0);
+	}
+	double total = 0;
+	for(unsigned t = 0; t < threads; t++) {
+		assert(pthread_join(thread[t].tid, NULL) == 0);
+		double ns = thread[t].ns;
+		printf("%u load time %f secs %.2f ns per item\n",
+		       t, ns / NANOSECS, ns / SAMPLES);
+		total += ns;
+	}
+	uint64_t t0 = nanotime();
+	for(unsigned t = 0; t < threads; t++) {
+		hg64_merge(hg, thg[t]);
+	}
+	uint64_t t1 = nanotime();
+	double ns = t1 - t0;
+	printf("merged time %f secs %.2f ns per item\n",
+	       ns / NANOSECS, ns / SAMPLES);
+	total += ns;
+	total /= threads;
+	printf("* load time %f secs %.2f ns per item\n",
+	       total / NANOSECS, total / SAMPLES);
+	summarize(hg);
+}
+
+static void
 merge(hg64 *hg, unsigned sigbits) {
 	hg64 *copy = hg64_create(sigbits);
 	uint64_t t0 = nanotime();
@@ -179,6 +215,19 @@ int main(void) {
 		}
 		hg = hg64_create(KEYBITS - 6);
 		parallel_load(hg, t);
+
+		hg64 *mhg = hg64_create(KEYBITS - 6);
+		merged_load(mhg, t);
+
+		uint64_t min, max, count;
+		for(unsigned k = 0; hg64_get(hg, k,  &min, &max, &count); k++) {
+			uint64_t mmin, mmax, mcount;
+			assert(hg64_get(mhg, k,  &mmin, &mmax, &mcount));
+			assert(min == mmin);
+			assert(max == mmax);
+			assert(count == mcount);
+		}
+		hg64_destroy(mhg);
 	}
 
 	for(unsigned sigbits = 1; sigbits < 11; sigbits++) {
