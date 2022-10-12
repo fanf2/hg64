@@ -232,20 +232,25 @@ get_key_count(hg64 *hg, unsigned key) {
 	       atomic_load_explicit(ctr, memory_order_relaxed));
 }
 
-/**********************************************************************/
-
-void
-hg64_add(hg64 *hg, uint64_t value, uint64_t inc) {
+static inline void
+add_key_count(hg64 *hg, unsigned key, uint64_t inc) {
 	if(inc == 0) return;
-	unsigned key = value_to_key(hg, value);
 	counter *ctr = key_to_counter(hg, key);
 	ctr = ctr ? ctr : key_to_new_counter(hg, key);
 	atomic_fetch_add_explicit(ctr, inc, memory_order_relaxed);
 }
 
+
+/**********************************************************************/
+
+void
+hg64_add(hg64 *hg, uint64_t value, uint64_t inc) {
+	add_key_count(hg, value_to_key(hg, value), inc);
+}
+
 void
 hg64_inc(hg64 *hg, uint64_t value) {
-	hg64_add(hg, value, 1);
+	add_key_count(hg, value_to_key(hg, value), 1);
 }
 
 bool
@@ -287,27 +292,20 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 void
 hg64_merge(hg64 *target, hg64 *source) {
 	uint64_t count;
-	if(target->sigbits > source->sigbits) {
-		unsigned shift = target->sigbits - source->sigbits;
-		unsigned counters = 1 << shift;
-		for(unsigned skey = 0;
-		    hg64_get(source, skey, NULL, NULL, &count);
-		    skey++) {
-			uint64_t div = count / counters;
-			uint64_t rem = count % counters;
-			for(unsigned ctr = 0; ctr < counters; ctr++) {
-				unsigned tkey = (skey << shift) | ctr;
+	for(unsigned skey = 0;
+	    hg64_get(source, skey, NULL, NULL, &count);
+	    skey++) {
+		uint64_t svmin = key_to_minval(source, skey);
+		uint64_t svmax = key_to_maxval(source, skey);
+		unsigned tkmin = value_to_key(target, svmin);
+		unsigned tkmax = value_to_key(target, svmax);
+		unsigned keys = tkmax - tkmin + 1;
 		/* is there a more cunning way to spread out the remainder? */
-				uint64_t inc = div + (uint64_t)(ctr < rem);
-				add_key_count(target, tkey, inc);
-			}
-		}
-	} else {
-		unsigned shift = source->sigbits - target->sigbits;
-		for(unsigned skey = 0;
-		    hg64_get(source, skey, NULL, NULL, &count);
-		    skey++) {
-			add_key_count(target, skey >> shift, count);
+		uint64_t div = count / keys;
+		uint64_t rem = count % keys;
+		for(unsigned tkey = tkmin; tkey <= tkmax; tkey++) {
+			uint64_t inc = div + (uint64_t)(tkey < rem);
+			add_key_count(target, tkey, inc);
 		}
 	}
 }
@@ -425,7 +423,7 @@ hg64s_quantile_of_value(const hg64s *hs, uint64_t value) {
 
 void
 hg64_validate(void) {
-	for(unsigned sigbits = 1; sigbits <= 6; sigbits++) {
+	for(unsigned sigbits = 1; sigbits < 12; sigbits++) {
 		const struct hg64p *hp = &(struct hg64p){ sigbits };
 		unsigned maxbin = MAXBIN(hp);
 		unsigned binsize = BINSIZE(hp);
