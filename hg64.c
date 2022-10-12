@@ -272,9 +272,11 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 	uint64_t min, max, count;
 	for(unsigned key = 0; hg64_get(hg, key, &min, &max, &count); key++) {
 		double delta = (double)min / 2.0 + (double)max / 2.0 - mean;
-		pop += count;
-		mean += count * delta / pop;
-		sigma += count * delta * (min + max - mean);
+		if(count != 0) { /* avoid division by zero */
+			pop += count;
+			mean += count * delta / pop;
+			sigma += count * delta * (min + max - mean);
+		}
 	}
 	OUTARG(pmean, mean);
 	OUTARG(pvar, sigma / pop);
