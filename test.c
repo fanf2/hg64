@@ -27,7 +27,7 @@
 extern void hg64_validate(void);
 
 #ifndef KEYBITS
-#define KEYBITS 18
+#define KEYBITS 12
 #endif
 
 #ifndef THREADS
@@ -79,23 +79,6 @@ summarize(hg64 *hg) {
 	printf("mean %f +/- %f\n", mean, sqrt(var));
 }
 
-static void
-data_vs_hg64(hg64s *hs, double q) {
-	size_t rank = (size_t)(q * THREADS * SAMPLES);
-	size_t t = rank % THREADS;
-	size_t i = rank / THREADS;
-	uint64_t value = hg64s_value_at_quantile(hs, q);
-	double p = hg64s_quantile_of_value(hs, data[t][i]);
-	double div = data[t][i] == 0 ? 1 : (double)data[t][i];
-	printf("data  %5.1f%% %8llu  "
-	       "hg64 %5.1f%% %8llu  "
-	       "error value %+f rank %+f\n",
-	       q * 100, data[t][i],
-	       p * 100, value,
-	       ((double)data[t][i] - (double)value) / div,
-	       (q - p) / (q == 0.0 ? 1.0 : q));
-}
-
 struct thread {
 	hg64 *hg;
 	uint64_t ns;
@@ -141,6 +124,34 @@ parallel_load(hg64 *hg, unsigned threads) {
 }
 
 static void
+merge(hg64 *hg, unsigned sigbits) {
+	hg64 *copy = hg64_create(sigbits);
+	uint64_t t0 = nanotime();
+	hg64_merge(copy, hg);
+	uint64_t t1 = nanotime();
+	printf("merge time %.0f μs\n", (double)(t1 - t0) / 1000);
+	summarize(copy);
+	hg64_destroy(copy);
+}
+
+static void
+data_vs_hg64(hg64s *hs, double q) {
+	size_t rank = (size_t)(q * THREADS * SAMPLES);
+	size_t t = rank % THREADS;
+	size_t i = rank / THREADS;
+	uint64_t value = hg64s_value_at_quantile(hs, q);
+	double p = hg64s_quantile_of_value(hs, data[t][i]);
+	double div = data[t][i] == 0 ? 1 : (double)data[t][i];
+	printf("data  %5.1f%% %8llu  "
+	       "hg64 %5.1f%% %8llu  "
+	       "error value %+f rank %+f\n",
+	       q * 100, data[t][i],
+	       p * 100, value,
+	       ((double)data[t][i] - (double)value) / div,
+	       (q - p) / (q == 0.0 ? 1.0 : q));
+}
+
+static void
 dump_csv(hg64 *hg) {
 	uint64_t value, count;
 	printf("value,count\n");
@@ -162,12 +173,17 @@ int main(void) {
 	}
 
 	hg64 *hg = NULL;
-	for(unsigned t = 0; t < THREADS; t++) {
+	for(unsigned t = 1; t < THREADS; t++) {
 		if(hg != NULL) {
 			hg64_destroy(hg);
 		}
 		hg = hg64_create(KEYBITS - 6);
 		parallel_load(hg, t);
+	}
+
+	for(unsigned sigbits = 1; sigbits < 11; sigbits++) {
+		printf("MERGE to %u\n", sigbits);
+		merge(hg, sigbits);
 	}
 
 	for(unsigned t = 0; t < THREADS; t++) {
