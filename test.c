@@ -44,13 +44,14 @@ extern void hg64_validate(void);
 
 static uint64_t data[THREADS][SAMPLES];
 
-#define NANOSECS (1000*1000*1000)
+#define NS_PER_S (1000*1000*1000)
+#define NS_PER_MS (1000*1000)
 
 static uint64_t
 nanotime(void) {
 	struct timespec tv;
 	assert(clock_gettime(CLOCK_MONOTONIC, &tv) == 0);
-	return((uint64_t)tv.tv_sec * NANOSECS + (uint64_t)tv.tv_nsec);
+	return((uint64_t)tv.tv_sec * NS_PER_S + (uint64_t)tv.tv_nsec);
 }
 
 
@@ -113,13 +114,11 @@ parallel_load(hg64 *hg, unsigned threads) {
 	for(unsigned t = 0; t < threads; t++) {
 		assert(pthread_join(thread[t].tid, NULL) == 0);
 		double ns = thread[t].ns;
-		printf("%u load time %f secs %.2f ns per item\n",
-		       t, ns / NANOSECS, ns / SAMPLES);
+		printf("%u load time %.1f ms %.2f ns per item\n",
+		       t, ns / NS_PER_MS, ns / SAMPLES);
 		total += ns;
 	}
-	total /= threads;
-	printf("* load time %f secs %.2f ns per item\n",
-	       total / NANOSECS, total / SAMPLES);
+	printf("* load time %.1f ms\n", total / NS_PER_MS);
 	summarize(hg);
 }
 
@@ -140,8 +139,8 @@ merged_load(hg64 *hg, unsigned threads) {
 	for(unsigned t = 0; t < threads; t++) {
 		assert(pthread_join(thread[t].tid, NULL) == 0);
 		double ns = thread[t].ns;
-		printf("%u load time %f secs %.2f ns per item\n",
-		       t, ns / NANOSECS, ns / SAMPLES);
+		printf("%u load time %.1f ms %.2f ns per item\n",
+		       t, ns / NS_PER_MS, ns / SAMPLES);
 		total += ns;
 	}
 	uint64_t t0 = nanotime();
@@ -150,12 +149,10 @@ merged_load(hg64 *hg, unsigned threads) {
 	}
 	uint64_t t1 = nanotime();
 	double ns = t1 - t0;
-	printf("merged time %f secs %.2f ns per item\n",
-	       ns / NANOSECS, ns / SAMPLES);
+	printf("merged time %.1f ms %.2f ns per item\n",
+	       ns / NS_PER_MS, ns / SAMPLES);
 	total += ns;
-	total /= threads;
-	printf("* load time %f secs %.2f ns per item\n",
-	       total / NANOSECS, total / SAMPLES);
+	printf("* load time %.1f ms\n", total / NS_PER_MS);
 	summarize(hg);
 }
 
