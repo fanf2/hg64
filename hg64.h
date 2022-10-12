@@ -105,12 +105,12 @@ uint64_t hg64s_rank_of_value(const hg64s *hs, uint64_t value);
  */
 double hg64s_quantile_of_value(const hg64s *hs, uint64_t value);
 
-/* TODO */
-
 /*
  * Increase the counts in `target` by the counts recorded in `source`
  */
 void hg64_merge(hg64 *target, hg64 *source);
+
+/* TODO */
 
 /*
  * Serialize the histogram into `buffer`, which has `size` bytes

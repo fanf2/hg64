@@ -282,6 +282,34 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 
 /**********************************************************************/
 
+void
+hg64_merge(hg64 *target, hg64 *source) {
+	uint64_t count;
+	if(target->sigbits > source->sigbits) {
+		unsigned shift = target->sigbits - source->sigbits;
+		unsigned counters = 1 << shift;
+		for(unsigned skey = 0;
+		    hg64_get(source, skey, NULL, NULL, &count);
+		    skey++) {
+			uint64_t div = count / counters;
+			uint64_t rem = count % counters;
+			for(unsigned ctr = 0; ctr < counters; ctr++) {
+				unsigned tkey = (skey << shift) | ctr;
+		/* is there a more cunning way to spread out the remainder? */
+				uint64_t inc = div + (uint64_t)(ctr < rem);
+				add_key_count(target, tkey, inc);
+			}
+		}
+	} else {
+		unsigned shift = source->sigbits - target->sigbits;
+		for(unsigned skey = 0;
+		    hg64_get(source, skey, NULL, NULL, &count);
+		    skey++) {
+			add_key_count(target, skey >> shift, count);
+		}
+	}
+}
+
 hg64s *
 hg64_snapshot(hg64 *hg) {
 	unsigned binsize = BINSIZE(hg);
