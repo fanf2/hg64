@@ -10,8 +10,8 @@
 
 #llvm	= /opt/homebrew/opt/llvm
 #CC	= $(llvm)/bin/clang
-#CFLAGS	= -g -O2 -std=c18 -Wall -Wextra #-fsanitize=undefined,address
 #LDFLAGS = -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib
+CFLAGS	= -g -O2 -Wall -Wextra #-fsanitize=undefined,address
 
 LIBS = -lm -lpthread
 OBJS = test.o hg64.o random.o
