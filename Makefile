@@ -8,19 +8,22 @@
 # License, v. 2.0.  If a copy of the MPL was not distributed with this
 # file, you can obtain one at https://mozilla.org/MPL/2.0/.
 
-KEYBITS = 12
-
 #llvm	= /opt/homebrew/opt/llvm
 #CC	= $(llvm)/bin/clang
-#CFLAGS	= -g -O3 -std=c18 -Wall -Wextra -DKEYBITS=$(KEYBITS) #-fsanitize=undefined,address
-#LDFLAGS = -g -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib -fsanitize=undefined,address
+#CFLAGS	= -g -O2 -std=c18 -Wall -Wextra #-fsanitize=undefined,address
+#LDFLAGS = -L$(llvm)/lib -Wl,-rpath,$(llvm)/lib
+
+LIBS = -lm -lpthread
+OBJS = test.o hg64.o random.o
 
 all: test
 
 clean:
-	rm -f *.o test
+	rm -f $(OBJS) test
 
-test: test.o hg64.o random.o
+test: $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+
 test.o: test.c hg64.h random.h
 hg64.o: hg64.c hg64.h
 random.o: random.c random.h
