@@ -12,6 +12,7 @@
 
 #include <assert.h>
 #include <err.h>
+#include <inttypes.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -174,9 +175,9 @@ data_vs_hg64(hg64s *hs, double q) {
 	uint64_t value = hg64s_value_at_quantile(hs, q);
 	double p = hg64s_quantile_of_value(hs, data[t][i]);
 	double div = data[t][i] == 0 ? 1 : (double)data[t][i];
-	printf("data  %5.1f%% %8llu  "
-	       "hg64 %5.1f%% %8llu  "
-	       "error value %+f rank %+f\n",
+	printf("data  %5.1f%% %8"PRIu64
+	       "  hg64 %5.1f%% %8"PRIu64
+	       "  error value %+f rank %+f\n",
 	       q * 100, data[t][i],
 	       p * 100, value,
 	       ((double)data[t][i] - (double)value) / div,
@@ -189,7 +190,7 @@ dump_csv(hg64 *hg) {
 	printf("value,count\n");
 	for(unsigned key = 0; hg64_get(hg, key, &value, NULL, &count); key++) {
 		if(count != 0) {
-			printf("%llu,%llu\n", value, count);
+			printf("%"PRIu64",%"PRIu64"\n", value, count);
 		}
 	}
 }
