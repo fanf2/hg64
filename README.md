@@ -16,10 +16,11 @@ The size of a `hg64` histogram depends on the range of values in the
 data stream, not the length of the data stream. The update performance
 is roughly constant, and mostly depends on cache locality.
 
-You can adjust the number of bits used in a `hg64` key by defining the
-`KEYBITS` preprocessor macro at compile time. Smaller keys require
-less memory, but are less accurate. The default is 12 bits; 10 bits is
-a reasonable alternative, or 8 bits for low precision.
+You can adjust the number of bits used for `hg64` keys in the test
+code by defining the `SIGBITS` preprocessor macro at compile time.
+Smaller keys require less memory, but are less accurate. The default
+is 5 bits, about 1% accuracy; 2 bits is about 10% accuracy, and 9 bits
+is about 0.1% accuracy.
 
 
 multithreading
@@ -64,7 +65,7 @@ building
 
 Run `make`, which should create a `test` program that performs a few
 simple tests on `hg64`. You may need to adjust the compiler options in
-the Makefile (e.g. add -lm to LDFLAGS).
+the Makefile (e.g. add -lm -lpthread to LIBS).
 
 There are not many requirements beyond standard C:
 
@@ -96,9 +97,9 @@ querying summary statistics about the data:
   * The mean and variance are calculated in floating point, so that
     they are useful for histograms of small values.
 
-  * There is no dependency on `libm`, which is why `hg64` calculates
-    the variance not the standard deviation. You can call `sqrt()` if
-    you need to.
+  * The core `hg64` code has no dependency on `libm`, which is why
+    `hg64` calculates the variance not the standard deviation. You can
+    call `sqrt()` if you need to. (But the test code needs `libm`.)
 
 
 contributing
