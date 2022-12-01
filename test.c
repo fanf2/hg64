@@ -25,8 +25,8 @@
 
 extern void hg64_validate(void);
 
-#ifndef KEYBITS
-#define KEYBITS 12
+#ifndef SIGBITS
+#define SIGBITS 5
 #endif
 
 #ifndef THREADS
@@ -209,10 +209,10 @@ int main(void) {
 		if(hg != NULL) {
 			hg64_destroy(hg);
 		}
-		hg = hg64_create(KEYBITS - 6);
+		hg = hg64_create(SIGBITS);
 		parallel_load(hg, t);
 
-		hg64 *mhg = hg64_create(KEYBITS - 6);
+		hg64 *mhg = hg64_create(SIGBITS);
 		merged_load(mhg, t);
 
 		uint64_t min, max, count;
