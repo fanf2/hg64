@@ -63,7 +63,8 @@ building
 --------
 
 Run `make`, which should create a `test` program that performs a few
-simple tests on `hg64`.
+simple tests on `hg64`. You may need to adjust the compiler options in
+the Makefile (e.g. add -lm to LDFLAGS).
 
 There are not many requirements beyond standard C:
 
