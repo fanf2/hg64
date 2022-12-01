@@ -3,14 +3,13 @@
  *
  * Written by Tony Finch <dot@dotat.at> <fanf@isc.org>
  *
- * Permission is hereby granted to use, copy, modify, and/or
- * distribute this software for any purpose with or without fee.
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
- * This software is provided 'as is', without warranty of any kind.
- * In no event shall the authors be liable for any damages arising
- * from the use of this software.
+ * SPDX-License-Identifier: MPL-2.0
  *
- * SPDX-License-Identifier: 0BSD OR MIT-0
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 #include <assert.h>

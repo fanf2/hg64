@@ -105,10 +105,11 @@ contributing
 
 Please send bug reports, suggestions, and patches by email to me, Tony
 Finch <<dot@dotat.at>>, or via GitHub. Any contribution that you want
-included in this code must be unrestricted (like the licence below),
-and must include a `Signed-off-by:` line to certify that you wrote it
-or otherwise have the right to pass it on as a open-source patch,
-according to the [Developer's Certificate of Origin 1.1][dco].
+included in this code must be made available under the MPL 2.0 or a
+compatible licence, and must include a `Signed-off-by:` line to
+certify that you wrote it or otherwise have the right to pass it on as
+a open-source patch, according to the [Developer's Certificate of
+Origin 1.1][dco].
 
 [dco]: <https://developercertificate.org>
 
@@ -118,13 +119,10 @@ licence
 
 Written by Tony Finch <<dot@dotat.at>> <<fanf@isc.org>>
 
-Permission is hereby granted to use, copy, modify, and/or
-distribute this software for any purpose with or without fee.
+Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 
-This software is provided 'as is', without warranty of any kind.
-In no event shall the authors be liable for any damages arising
-from the use of this software.
+SPDX-License-Identifier: MPL-2.0
 
-    SPDX-License-Identifier: 0BSD OR MIT-0
-
-_[this is a zero-conditions libre software licence](https://dotat.at/0lib.html)_
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0.  If a copy of the MPL was not distributed with this
+file, you can obtain one at https://mozilla.org/MPL/2.0/.
