@@ -98,7 +98,7 @@ typedef void *hg64u;
 
 /**********************************************************************/
 
-#define OUTARG(ptr, val) (((ptr) != NULL) && (bool)(*(ptr) = (val)))
+#define OUTARG(ptr, val) (void)(((ptr) != NULL) && (bool)(*(ptr) = (val)))
 
 static inline uint64_t
 interpolate(uint64_t span, uint64_t mul, uint64_t div) {
