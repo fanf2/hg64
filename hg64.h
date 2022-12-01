@@ -16,7 +16,7 @@ typedef struct hg64 hg64;
 typedef struct hg64s hg64s;
 
 /*
- * Allocate a new histogram. `sigbits` must be between 1 and 6
+ * Allocate a new histogram. `sigbits` must be between 1 and 15
  * inclusive; it is the number of significant bits of each value
  * to use when mapping values to buckets.
  */
