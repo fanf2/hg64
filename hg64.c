@@ -45,6 +45,7 @@ get_bin(hg64 *hg, unsigned b) {
  */
 struct hg64s {
 	unsigned sigbits;
+	uint64_t binmap;
 	uint64_t population;
 	uint64_t total[BINS];
 	uint64_t *bin[BINS];
@@ -312,7 +313,7 @@ hg64_merge(hg64 *target, hg64 *source) {
 hg64s *
 hg64_snapshot(hg64 *hg) {
 	unsigned binsize = BINSIZE(hg);
-	uint64_t bins = 0;
+	uint64_t binmap = 0;
 	size_t bytes = 0;
 	/*
 	 * first find out which bins we will copy across
@@ -320,19 +321,20 @@ hg64_snapshot(hg64 *hg) {
 	 */
 	for(unsigned b = 0; b < BINS; b++) {
 		if(get_bin(hg, b) != NULL) {
-			bins |= 1 << b;
+			binmap |= 1 << b;
 			bytes += binsize * sizeof(uint64_t);
 		}
 	}
 	hg64s *hs = malloc(sizeof(hg64s) + bytes);
 	memset(hs, 0, sizeof(hg64s) + bytes);
 	hs->sigbits = hg->sigbits;
+	hs->binmap = binmap;
 	/*
 	 * second, copy the data, using the bin bitmap not get_bin()
 	 * because concurrent threads may have added new bins
 	 */
 	for(unsigned b = 0; b < BINS; b++) {
-		if(((1 << b) & bins) == 0) {
+		if(((1 << b) & binmap) == 0) {
 			continue;
 		}
 		hs->bin[b] = &hs->counters[binsize * b];
