@@ -266,6 +266,17 @@ hg64_get(hg64 *hg, unsigned key,
 	}
 }
 
+unsigned
+hg64_next(hg64 *hg, unsigned key) {
+	key++;
+	while(key < KEYS(hg) &&
+	      (key & (BINSIZE(hg) - 1)) == 0 &&
+	      key_to_counter(hg, key) == NULL) {
+		key += BINSIZE(hg);
+	}
+	return(key);
+}
+
 /*
  * https://fanf2.user.srcf.net/hermes/doc/antiforgery/stats.pdf
  */
@@ -275,7 +286,9 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 	double mean = 0.0;
 	double sigma = 0.0;
 	uint64_t min, max, count;
-	for(unsigned key = 0; hg64_get(hg, key, &min, &max, &count); key++) {
+	for(unsigned key = 0;
+	    hg64_get(hg, key, &min, &max, &count);
+	    key = hg64_next(hg, key)) {
 		double delta = (double)min / 2.0 + (double)max / 2.0 - mean;
 		if(count != 0) { /* avoid division by zero */
 			pop += count;
@@ -294,7 +307,7 @@ hg64_merge(hg64 *target, hg64 *source) {
 	uint64_t count;
 	for(unsigned skey = 0;
 	    hg64_get(source, skey, NULL, NULL, &count);
-	    skey++) {
+	    skey = hg64_next(source, skey)) {
 		uint64_t svmin = key_to_minval(source, skey);
 		uint64_t svmax = key_to_maxval(source, skey);
 		unsigned tkmin = value_to_key(target, svmin);

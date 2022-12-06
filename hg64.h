@@ -48,10 +48,10 @@ void hg64_inc(hg64 *hg, uint64_t value);
 void hg64_add(hg64 *hg, uint64_t value, uint64_t inc);
 
 /*
- * Get information about a bucket. This can be used as an iterator, by
- * initializing `key` to zero and incrementing by one until `hg64_get()`
- * returns `false`. The number of iterations is a little less than
- * `1 << (6 + sigbits)`.
+ * Get information about a bucket. This can be used as an iterator,
+ * by initializing `key` to zero and incrementing by one or using
+ * `hg64_next()` until `hg64_get()` returns `false`. The number of
+ * iterations is a little less than `1 << (6 + sigbits)`.
  *
  * If `pmin` is non-NULL it is set to the bucket's minimum inclusive value.
  *
@@ -62,6 +62,11 @@ void hg64_add(hg64 *hg, uint64_t value, uint64_t inc);
  */
 bool hg64_get(hg64 *hg, unsigned key,
 		  uint64_t *pmin, uint64_t *pmax, uint64_t *pcount);
+
+/*
+ * Skip to the next key, omitting groups of nonexistent buckets.
+ */
+unsigned hg64_next(hg64 *hg, unsigned key);
 
 /*
  * Get summary statistics about the histogram.

@@ -188,7 +188,9 @@ static void
 dump_csv(hg64 *hg) {
 	uint64_t value, count;
 	printf("value,count\n");
-	for(unsigned key = 0; hg64_get(hg, key, &value, NULL, &count); key++) {
+	for(unsigned key = 0;
+	    hg64_get(hg, key, &value, NULL, &count);
+	    key = hg64_next(hg, key)) {
 		if(count != 0) {
 			printf("%"PRIu64",%"PRIu64"\n", value, count);
 		}
@@ -217,9 +219,11 @@ int main(void) {
 		merged_load(mhg, t);
 
 		uint64_t min, max, count;
-		for(unsigned k = 0; hg64_get(hg, k,  &min, &max, &count); k++) {
+		for(unsigned key = 0;
+		    hg64_get(hg, key,  &min, &max, &count);
+		    key = hg64_next(hg, key)) {
 			uint64_t mmin, mmax, mcount;
-			assert(hg64_get(mhg, k,  &mmin, &mmax, &mcount));
+			assert(hg64_get(mhg, key,  &mmin, &mmax, &mcount));
 			assert(min == mmin);
 			assert(max == mmax);
 			assert(count == mcount);
