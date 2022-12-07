@@ -18,7 +18,7 @@ typedef struct hg64s hg64s;
 /*
  * Allocate a new histogram. `sigbits` must be between 1 and 15
  * inclusive; it is the number of significant bits of each value
- * to use when mapping values to buckets.
+ * to use when mapping values to counters.
  */
 hg64 *hg64_create(unsigned sigbits);
 
@@ -38,33 +38,37 @@ unsigned hg64_sigbits(hg64 *hg);
 size_t hg64_size(hg64 *hg);
 
 /*
- * Add 1 to the value's bucket
+ * Add 1 to the value's counter
  */
 void hg64_inc(hg64 *hg, uint64_t value);
 
 /*
- * Add an arbitrary increment to the value's bucket
+ * Add an arbitrary increment to the value's counter
  */
 void hg64_add(hg64 *hg, uint64_t value, uint64_t inc);
 
 /*
- * Get information about a bucket. This can be used as an iterator,
+ * Get information about a counter. This can be used as an iterator,
  * by initializing `key` to zero and incrementing by one or using
  * `hg64_next()` until `hg64_get()` returns `false`. The number of
  * iterations is a little less than `1 << (6 + sigbits)`.
  *
- * If `pmin` is non-NULL it is set to the bucket's minimum inclusive value.
+ * If `pmin` is non-NULL it is set to the minimum inclusive value
+ * that maps to this counter.
  *
- * If `pmax` is non-NULL it is set to the bucket's maximum inclusive value.
+ * If `pmax` is non-NULL it is set to the maximum inclusive value
+ * that maps to this counter.
  *
- * If `pcount` is non-NULL it is set to the bucket's counter, which
- * can be zero. (Empty buckets are included in the iterator.)
+ * If `pcount` is non-NULL it is set to the contents of the counter,
+ * which can be zero.
  */
 bool hg64_get(hg64 *hg, unsigned key,
 		  uint64_t *pmin, uint64_t *pmax, uint64_t *pcount);
 
 /*
- * Skip to the next key, omitting groups of nonexistent buckets.
+ * Skip to the next key, omitting "bins" of nonexistent counters.
+ * This function does not skip counters that exist but are zero.
+ * Counters are created in bins of size `1 << sigbits`.
  */
 unsigned hg64_next(hg64 *hg, unsigned key);
 
