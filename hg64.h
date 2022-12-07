@@ -68,7 +68,8 @@ bool hg64_get(hg64 *hg, unsigned key,
 /*
  * Skip to the next key, omitting "bins" of nonexistent counters.
  * This function does not skip counters that exist but are zero.
- * Counters are created in bins of size `1 << sigbits`.
+ * A bin contains `1 << sigbits` counters, and counters are created
+ * in bulk one whole bin at a time.
  */
 unsigned hg64_next(hg64 *hg, unsigned key);
 
