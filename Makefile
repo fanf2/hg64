@@ -16,14 +16,18 @@ CFLAGS	= -g -O2 -Wall -Wextra #-fsanitize=undefined,address
 LIBS = -lm -lpthread
 OBJS = test.o hg64.o random.o
 
-all: test
+all: test error
 
 clean:
-	rm -f $(OBJS) test
+	rm -f $(OBJS) test error
 
 test: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
+error: hg64.o error.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ hg64.o error.o $(LIBS)
+
 test.o: test.c hg64.h random.h
 hg64.o: hg64.c hg64.h
 random.o: random.c random.h
+error.o: error.c
