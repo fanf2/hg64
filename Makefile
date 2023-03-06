@@ -15,11 +15,12 @@ CFLAGS	= -g -O2 -Wall -Wextra #-fsanitize=undefined,address
 
 LIBS = -lm -lpthread
 OBJS = test.o hg64.o random.o
+BINS = test sigs
 
-all: test sigs
+all: $(BINS)
 
 clean:
-	rm -f $(OBJS) test
+	rm -f $(OBJS) $(BINS)
 
 test: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
