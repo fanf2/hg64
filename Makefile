@@ -16,7 +16,7 @@ CFLAGS	= -g -O2 -Wall -Wextra #-fsanitize=undefined,address
 LIBS = -lm -lpthread
 OBJS = test.o hg64.o random.o
 
-all: test
+all: test sigs
 
 clean:
 	rm -f $(OBJS) test
@@ -24,6 +24,7 @@ clean:
 test: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
+sigs: sigs.c
 test.o: test.c hg64.h random.h
 hg64.o: hg64.c hg64.h
 random.o: random.c random.h
