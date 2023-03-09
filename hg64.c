@@ -268,11 +268,12 @@ hg64_get(hg64 *hg, unsigned key,
 
 unsigned
 hg64_next(hg64 *hg, unsigned key) {
+	unsigned binsize = BINSIZE(hg);
 	key++;
 	while(key < KEYS(hg) &&
-	      (key & (BINSIZE(hg) - 1)) == 0 &&
-	      key_to_counter(hg, key) == NULL) {
-		key += BINSIZE(hg);
+	      key % binsize == 0 &&
+	      get_bin(hg, key / binsize) == NULL) {
+		key += binsize;
 	}
 	return(key);
 }
