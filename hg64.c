@@ -278,6 +278,8 @@ hg64_next(hg64 *hg, unsigned key) {
 	return(key);
 }
 
+/**********************************************************************/
+
 /*
  * https://fanf2.user.srcf.net/hermes/doc/antiforgery/stats.pdf
  */
@@ -304,25 +306,32 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 /**********************************************************************/
 
 void
-hg64_merge(hg64 *target, hg64 *source) {
-	uint64_t count;
-	for(unsigned skey = 0;
-	    hg64_get(source, skey, NULL, NULL, &count);
-	    skey = hg64_next(source, skey)) {
-		uint64_t svmin = key_to_minval(source, skey);
-		uint64_t svmax = key_to_maxval(source, skey);
-		unsigned tkmin = value_to_key(target, svmin);
-		unsigned tkmax = value_to_key(target, svmax);
-		unsigned keys = tkmax - tkmin + 1;
-		/* is there a more cunning way to spread out the remainder? */
-		uint64_t div = count / keys;
-		uint64_t rem = count % keys;
-		for(unsigned tkey = tkmin; tkey <= tkmax; tkey++) {
-			uint64_t inc = div + (uint64_t)(tkey < rem);
-			add_key_count(target, tkey, inc);
-		}
+hg64_put(hg64 *hg, uint64_t min, uint64_t max, uint64_t count) {
+	unsigned kmin = value_to_key(hg, min);
+	unsigned kmax = value_to_key(hg, max);
+	for(unsigned key = kmin; key <= kmax; key++) {
+		uint64_t mid = key_to_maxval(hg, key);
+		mid = mid < max ? mid : max;
+		double some = mid - min + 1;
+		double rest = max - min + 1;
+		uint64_t inc = count * (some / rest);
+		add_key_count(hg, key, inc);
+		count -= inc;
+		min = mid + 1;
 	}
 }
+
+void
+hg64_merge(hg64 *target, hg64 *source) {
+	uint64_t min, max, count;
+	for(unsigned skey = 0;
+	    hg64_get(source, skey, &min, &max, &count);
+	    skey = hg64_next(source, skey)) {
+		hg64_put(target, min, max, count);
+	}
+}
+
+/**********************************************************************/
 
 hg64s *
 hg64_snapshot(hg64 *hg) {

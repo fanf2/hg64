@@ -48,7 +48,15 @@ void hg64_inc(hg64 *hg, uint64_t value);
 void hg64_add(hg64 *hg, uint64_t value, uint64_t inc);
 
 /*
- * Get information about a counter. This can be used as an iterator,
+ * Add a data point, such as one imported from elsewhere. Values
+ * between `min` and `max` inclusive occurred `count` times. This
+ * function increases the buckets that span `min` and `max` by a total
+ * of `count`. It is the counterpart of hg64_get().
+ */
+void hg64_put(hg64 *hg, uint64_t min, uint64_t max, uint64_t count);
+
+/*
+ * Export information about a counter. This can be used as an iterator,
  * by initializing `key` to zero and incrementing by one or using
  * `hg64_next()` until `hg64_get()` returns `false`. The number of
  * iterations is a little less than `1 << (6 + sigbits)`.
@@ -72,6 +80,13 @@ bool hg64_get(hg64 *hg, unsigned key,
  * in bulk one whole bin at a time.
  */
 unsigned hg64_next(hg64 *hg, unsigned key);
+
+/*
+ * Increase the counts in `target` by the counts recorded in `source`.
+ * This function uses `hg64_get()` and `hg64_next()` to export the
+ * data from `source`, and `hg64_put()` to import it into `target`.
+ */
+void hg64_merge(hg64 *target, hg64 *source);
 
 /*
  * Get summary statistics about the histogram.
@@ -113,11 +128,6 @@ uint64_t hg64s_rank_of_value(const hg64s *hs, uint64_t value);
  * Get the approximate quantile of a value in the recorded data.
  */
 double hg64s_quantile_of_value(const hg64s *hs, uint64_t value);
-
-/*
- * Increase the counts in `target` by the counts recorded in `source`
- */
-void hg64_merge(hg64 *target, hg64 *source);
 
 /* TODO */
 
