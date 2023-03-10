@@ -128,12 +128,3 @@ uint64_t hg64s_rank_of_value(const hg64s *hs, uint64_t value);
  * Get the approximate quantile of a value in the recorded data.
  */
 double hg64s_quantile_of_value(const hg64s *hs, uint64_t value);
-
-/* TODO */
-
-/*
- * Serialize the histogram into `buffer`, which has `size` bytes
- * available. Returns the number of bytes required; if the return
- * value is greater than `size` the output has been truncated.
- */
-size_t hg64_export(hg64 *hg, uint8_t *buffer, size_t size);
