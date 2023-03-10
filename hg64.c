@@ -244,13 +244,29 @@ add_key_count(hg64 *hg, unsigned key, uint64_t inc) {
 /**********************************************************************/
 
 void
+hg64_inc(hg64 *hg, uint64_t value) {
+	add_key_count(hg, value_to_key(hg, value), 1);
+}
+
+void
 hg64_add(hg64 *hg, uint64_t value, uint64_t inc) {
 	add_key_count(hg, value_to_key(hg, value), inc);
 }
 
 void
-hg64_inc(hg64 *hg, uint64_t value) {
-	add_key_count(hg, value_to_key(hg, value), 1);
+hg64_put(hg64 *hg, uint64_t min, uint64_t max, uint64_t count) {
+	unsigned kmin = value_to_key(hg, min);
+	unsigned kmax = value_to_key(hg, max);
+	for(unsigned key = kmin; key <= kmax; key++) {
+		uint64_t mid = key_to_maxval(hg, key);
+		mid = mid < max ? mid : max;
+		double some = mid - min + 1;
+		double rest = max - min + 1;
+		uint64_t inc = count * (some / rest);
+		add_key_count(hg, key, inc);
+		count -= inc;
+		min = mid + 1;
+	}
 }
 
 bool
@@ -278,6 +294,16 @@ hg64_next(hg64 *hg, unsigned key) {
 	return(key);
 }
 
+void
+hg64_merge(hg64 *target, hg64 *source) {
+	uint64_t min, max, count;
+	for(unsigned skey = 0;
+	    hg64_get(source, skey, &min, &max, &count);
+	    skey = hg64_next(source, skey)) {
+		hg64_put(target, min, max, count);
+	}
+}
+
 /**********************************************************************/
 
 /*
@@ -301,34 +327,6 @@ hg64_mean_variance(hg64 *hg, double *pmean, double *pvar) {
 	}
 	OUTARG(pmean, mean);
 	OUTARG(pvar, sigma / pop);
-}
-
-/**********************************************************************/
-
-void
-hg64_put(hg64 *hg, uint64_t min, uint64_t max, uint64_t count) {
-	unsigned kmin = value_to_key(hg, min);
-	unsigned kmax = value_to_key(hg, max);
-	for(unsigned key = kmin; key <= kmax; key++) {
-		uint64_t mid = key_to_maxval(hg, key);
-		mid = mid < max ? mid : max;
-		double some = mid - min + 1;
-		double rest = max - min + 1;
-		uint64_t inc = count * (some / rest);
-		add_key_count(hg, key, inc);
-		count -= inc;
-		min = mid + 1;
-	}
-}
-
-void
-hg64_merge(hg64 *target, hg64 *source) {
-	uint64_t min, max, count;
-	for(unsigned skey = 0;
-	    hg64_get(source, skey, &min, &max, &count);
-	    skey = hg64_next(source, skey)) {
-		hg64_put(target, min, max, count);
-	}
 }
 
 /**********************************************************************/
