@@ -168,7 +168,8 @@ key_to_minval(hg64u hu, unsigned key) {
 static inline uint64_t
 key_to_maxval(hg64u hu, unsigned key) {
 	unsigned binsize = BINSIZE(hg64p(hu));
-	unsigned shift = 63 - (key / binsize);
+	unsigned exponent = (key / binsize) - 1;
+	unsigned shift = BINS - exponent - 2;
 	uint64_t range = UINT64_MAX/4 >> shift;
 	return(key_to_minval(hu, key) + range);
 }
